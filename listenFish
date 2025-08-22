@@ -1,0 +1,9 @@
+#!/bin/bash
+
+source commonEnv
+
+source ${RUN_DIR}/venv/bin/activate
+
+cd ${FISH_DIR}
+
+python -m tools.api_server --compile --listen 0.0.0.0:8080

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+source commonEnv
+
+sudo apt install portaudio19-dev libsox-dev ffmpeg
+
+mkdir -p ${RUN_DIR}
+cd ${RUN_DIR}
+python -m venv venv
+source ${RUN_DIR}/venv/bin/activate
+
+pip install -U "huggingface_hub[cli]"

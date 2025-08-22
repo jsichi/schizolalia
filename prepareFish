@@ -1,6 +1,13 @@
 #!/bin/bash
 
-SRC_DIR=.
-RUN_DIR=${SRC_DIR}/run
+source commonEnv
 
-mkdir -p ${RUN_DIR}
+cd ${RUN_DIR}
+git clone git@github.com:jsichi/fish-speech.git
+
+source ${RUN_DIR}/venv/bin/activate
+
+cd ${FISH_DIR}
+pip install -e .
+
+hf download fishaudio/openaudio-s1-mini --local-dir checkpoints/openaudio-s1-mini
