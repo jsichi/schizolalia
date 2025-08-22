@@ -1,2 +1,6 @@
 #!/bin/bash
 
+SRC_DIR=.
+RUN_DIR=${SRC_DIR}/run
+
+mkdir -p ${RUN_DIR}
