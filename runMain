@@ -1,0 +1,10 @@
+#!/bin/bash
+
+source commonEnv
+
+source ${RUN_DIR}/venv/bin/activate
+
+cd ${RUN_DIR}
+
+python ${SRC_DIR}/main.py
+

@@ -13,3 +13,4 @@ pip install -e .
 hf download fishaudio/openaudio-s1-mini --local-dir checkpoints/openaudio-s1-mini
 mkdir -p ${FISH_DIR}/references
 cp -r ${SRC_DIR}/samples/rocky ${FISH_DIR}/references
+cp -r ${SRC_DIR}/samples/bubbles ${FISH_DIR}/references
