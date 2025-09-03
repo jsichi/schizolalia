@@ -19,11 +19,12 @@ from flux_led import BulbScanner, WifiLedBulb
 from threading import Timer
 
 import openai
-import whisper
 
-openai.api_key = "..."
-openai.api_base = "http://localhost:5000/v1"
-openai.api_version = "2023-05-15"
+client = openai.OpenAI(
+    api_key="...",
+    base_url="http://localhost:5000/v1")
+
+import whisper
 
 gray = (10, 10, 10)
 black = (0, 0, 0)
@@ -36,6 +37,7 @@ magenta = (255, 0, 255)
 inputFilename = "input.wav"
 extraInputFilename = "extra.wav"
 stopCollecting = threading.Event()
+messages = []
 
 whisperModel = whisper.load_model('base')
 
@@ -121,6 +123,15 @@ def collectInput(recorder, cobra):
     collectInitialInput(recorder, cobra)
     return collectRestOfInput(recorder, cobra)
 
+def sendChat(input):
+    messages.append({"role": "user", "content": input}),
+    chatResponse = client.chat.completions.create(
+        model="bubbles",
+        messages=messages)
+    responseText = chatResponse.choices[0].message.content
+    messages.append({"role": "assistant", "content": responseText}),
+    return responseText
+
 def main():
     config = configparser.ConfigParser()
     config.read('config.ini')
@@ -163,6 +174,10 @@ def main():
             input = collectInput(recorder, cobra)
             print("Complete Input:  " + input)
 
+            bulb.setRgb(*blue)
+            responseText = sendChat(input)
+            print("Response:  " + responseText)
+
     finally:
         bulb.setRgb(*black)
         recorder.delete()
@@ -170,4 +185,4 @@ def main():
         cobra.delete()
 
 main()
-        
+

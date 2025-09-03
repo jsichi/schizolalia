@@ -1,0 +1,8 @@
+#!/bin/bash
+
+source commonEnv
+
+cd ${RUN_DIR}
+
+ollama serve
+

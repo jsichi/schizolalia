@@ -1,0 +1,13 @@
+#!/bin/bash
+
+source commonEnv
+
+cd ${SRC_DIR}
+
+curl -fsSL https://ollama.com/install.sh | sh
+
+sudo systemctl stop ollama
+sudo systemctl disable ollama
+
+# In one terminal:  listenOllama
+# In second terminal:  ollama create bubbles -f models/bubbles
