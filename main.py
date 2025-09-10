@@ -46,6 +46,18 @@ whisperModel = whisper.load_model('base')
 def call_subprocess(script_path, *args):
     subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
 
+def speakText(text):
+    print("Saying:  " + text)
+    call_subprocess(
+        "fish-speech/tools/api_client.py",
+        "--url", "http://localhost:8080/v1/tts",
+        "-t", text,
+        "--reference_id", "bubbles",
+        "--output", "output",
+        "--latency", "balanced",
+        "--use_memory_cache", "on",
+        "--streaming", "True")
+
 def lightBulb(color):
     global bulb
     bulb.setRgb(*color)
@@ -194,18 +206,13 @@ def main():
 
             lightBulb(green)
             output = processInput(recorder, cobra)
-            annotatedOutput = "[excited] " + output
+            annotatedOutput = "(excited) " + output
 
-            lightBulb(magenta)
-            print("Saying:  " + annotatedOutput)
-            call_subprocess(
-                "fish-speech/tools/api_client.py",
-                "--url", "http://localhost:8080/v1/tts",
-                "-t", annotatedOutput,
-                "--reference_id", "bubbles",
-                "--output", "output",
-                "--use_memory_cache", "on",
-                "--streaming", "True")
+            bulb.setCustomPattern(
+                (magenta, blue),
+                100,
+                "gradual")
+            speakText(annotatedOutput)
 
     finally:
         lightBulb(black)
