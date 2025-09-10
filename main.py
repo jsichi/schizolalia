@@ -95,20 +95,26 @@ def listenForWakeword(recorder, porcupine):
 def collectInitialInput(recorder, cobra):
     wavFile = createWav(inputFilename)
     collecting = True
-    silenceCount = -1
+    heardVoice = False
+    silenceCount = 0
     while collecting:
         pcm = recorder.read()
         voiceProb = cobra.process(pcm)
         wavFile.writeframes(struct.pack("h" * len(pcm), *pcm))
         if voiceProb > 0.5:
             silenceCount = 0
+            heardVoice = True
         else:
-            if silenceCount > -1:
-                silenceCount += 1
+            silenceCount += 1
+            if heardVoice:
                 if silenceCount > 30:
-                    lightBulb(blue)
-                    wavFile.close()
                     collecting = False
+            else:
+                if silenceCount > 500:
+                    collecting = False
+    wavFile.close()
+    return heardVoice
+                    
 
 def recordInput(target, input):
     target.append({"role": "user", "content": input}),
@@ -152,9 +158,11 @@ def processRestOfInput(recorder, cobra):
             return tentativeResponse
 
 def processInput(recorder, cobra):
-    collectInitialInput(recorder, cobra)
-    lightBulb(blue)
-    return processRestOfInput(recorder, cobra)
+    if collectInitialInput(recorder, cobra):
+        lightBulb(blue)
+        return processRestOfInput(recorder, cobra)
+    else:
+        return ""
 
 def sendChat(input):
     tentative = messages.copy()
@@ -202,17 +210,24 @@ def main():
     try:
         while not bail:
             lightBulb(gray)
+            messages.clear()
             listenForWakeword(recorder, porcupine)
 
-            lightBulb(green)
-            output = processInput(recorder, cobra)
-            annotatedOutput = "(excited) " + output
+            conversing = True
 
-            bulb.setCustomPattern(
-                (magenta, blue),
-                100,
-                "gradual")
-            speakText(annotatedOutput)
+            while conversing:
+                lightBulb(green)
+                output = processInput(recorder, cobra)
+                if output:
+                    annotatedOutput = "(excited) " + output
+
+                    bulb.setCustomPattern(
+                        (magenta, blue),
+                        100,
+                        "gradual")
+                    speakText(annotatedOutput)
+                else:
+                    conversing = False
 
     finally:
         lightBulb(black)
