@@ -43,6 +43,9 @@ global bulb
 
 whisperModel = whisper.load_model('base')
 
+def call_subprocess(script_path, *args):
+    subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
+
 def lightBulb(color):
     global bulb
     bulb.setRgb(*color)
@@ -115,6 +118,7 @@ def processRestOfInput(recorder, cobra):
             inputFilename, fp16=False, language='English')['text']
         print("Heard:  " + whisperResult)
         tentativeResponse = sendChat(whisperResult)
+        print("Tentative response:  " + tentativeResponse)
         stopCollecting.set()
         collectThread.join()
         if stillTalking:
@@ -141,7 +145,7 @@ def processInput(recorder, cobra):
     return processRestOfInput(recorder, cobra)
 
 def sendChat(input):
-    tentative = messages
+    tentative = messages.copy()
     recordInput(tentative, input)
     chatResponse = client.chat.completions.create(
         model="bubbles",
@@ -185,15 +189,26 @@ def main():
 
     try:
         while not bail:
-            bulb.setRgb(*gray)
+            lightBulb(gray)
             listenForWakeword(recorder, porcupine)
 
-            bulb.setRgb(*green)
+            lightBulb(green)
             output = processInput(recorder, cobra)
-            print("Saying:  " + output)
+            annotatedOutput = "[excited] " + output
+
+            lightBulb(magenta)
+            print("Saying:  " + annotatedOutput)
+            call_subprocess(
+                "fish-speech/tools/api_client.py",
+                "--url", "http://localhost:8080/v1/tts",
+                "-t", annotatedOutput,
+                "--reference_id", "bubbles",
+                "--output", "output",
+                "--use_memory_cache", "on",
+                "--streaming", "True")
 
     finally:
-        bulb.setRgb(*black)
+        lightBulb(black)
         recorder.delete()
         porcupine.delete()
         cobra.delete()
