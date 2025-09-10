@@ -39,7 +39,13 @@ extraInputFilename = "extra.wav"
 stopCollecting = threading.Event()
 messages = []
 
+global bulb
+
 whisperModel = whisper.load_model('base')
+
+def lightBulb(color):
+    global bulb
+    bulb.setRgb(*color)
 
 def createWav(filename):
     wavFile = wave.open(filename, "w")
@@ -56,6 +62,7 @@ def collectInputChunk(recorder, cobra, wavFile):
         wavFile.writeframes(struct.pack("h" * len(pcm), *pcm))
         if voiceProb > 0.5:
             global stillTalking
+            lightBulb(green)
             stillTalking = True
             silenceCount = 0
         else:
@@ -84,10 +91,17 @@ def collectInitialInput(recorder, cobra):
             if silenceCount > -1:
                 silenceCount += 1
                 if silenceCount > 30:
+                    lightBulb(blue)
                     wavFile.close()
                     collecting = False
 
-def collectRestOfInput(recorder, cobra):
+def recordInput(target, input):
+    target.append({"role": "user", "content": input}),
+
+def recordOutput(target, output):
+    target.append({"role": "assistant", "content": output}),
+
+def processRestOfInput(recorder, cobra):
     global stillTalking
 
     while True:
@@ -100,6 +114,7 @@ def collectRestOfInput(recorder, cobra):
         whisperResult = whisperModel.transcribe(
             inputFilename, fp16=False, language='English')['text']
         print("Heard:  " + whisperResult)
+        tentativeResponse = sendChat(whisperResult)
         stopCollecting.set()
         collectThread.join()
         if stillTalking:
@@ -110,26 +125,28 @@ def collectRestOfInput(recorder, cobra):
                 w = wave.open(infile, 'rb')
                 data.append([w.getparams(), w.readframes(w.getnframes())])
                 w.close()
-
             output = wave.open(inputFilename, 'wb')
             output.setparams(data[0][0])
             output.writeframes(data[0][1])
             output.writeframes(data[1][1])
             output.close()
         else:
-            return whisperResult
+            recordInput(messages, whisperResult)
+            recordOutput(messages, tentativeResponse)
+            return tentativeResponse
 
-def collectInput(recorder, cobra):
+def processInput(recorder, cobra):
     collectInitialInput(recorder, cobra)
-    return collectRestOfInput(recorder, cobra)
+    lightBulb(blue)
+    return processRestOfInput(recorder, cobra)
 
 def sendChat(input):
-    messages.append({"role": "user", "content": input}),
+    tentative = messages
+    recordInput(tentative, input)
     chatResponse = client.chat.completions.create(
         model="bubbles",
-        messages=messages)
+        messages=tentative)
     responseText = chatResponse.choices[0].message.content
-    messages.append({"role": "assistant", "content": responseText}),
     return responseText
 
 def main():
@@ -154,6 +171,7 @@ def main():
         print("Failed to initialize Cobra")
         raise e
 
+    global bulb
     bulbAddress = config['fluxled']['BulbAddress']
     bulb = WifiLedBulb(bulbAddress)
     bulb.turnOn()
@@ -171,12 +189,8 @@ def main():
             listenForWakeword(recorder, porcupine)
 
             bulb.setRgb(*green)
-            input = collectInput(recorder, cobra)
-            print("Complete Input:  " + input)
-
-            bulb.setRgb(*blue)
-            responseText = sendChat(input)
-            print("Response:  " + responseText)
+            output = processInput(recorder, cobra)
+            print("Saying:  " + output)
 
     finally:
         bulb.setRgb(*black)
