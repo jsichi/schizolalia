@@ -10,5 +10,6 @@ source ${RUN_DIR}/venv/bin/activate
 cd ${FISH_DIR}
 pip install -e .
 
+hf auth login
 hf download fishaudio/openaudio-s1-mini --local-dir checkpoints/openaudio-s1-mini
 mkdir -p ${FISH_DIR}/references
