@@ -5,6 +5,7 @@ source commonEnv
 sudo apt install portaudio19-dev libsox-dev ffmpeg
 
 mkdir -p ${RUN_DIR}
+cp ${SRC_DIR}/example.ini ${RUN_DIR}/config.ini
 cd ${RUN_DIR}
 python -m venv venv
 source ${RUN_DIR}/venv/bin/activate
