@@ -1,0 +1,9 @@
+#!/bin/bash
+# Requires listenOllama already running
+
+source commonEnv
+
+cp -r ${SRC_DIR}/samples/bubbles ${FISH_DIR}/references
+
+cd ${SRC_DIR}
+ollama create bubbles -f models/bubbles

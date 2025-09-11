@@ -1,0 +1,9 @@
+#!/bin/bash
+# Requires listenOllama already running
+
+source commonEnv
+
+cp -r ${SRC_DIR}/samples/rocky ${FISH_DIR}/references
+
+cd ${SRC_DIR}
+ollama create rocky -f models/rocky
