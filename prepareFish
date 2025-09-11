@@ -3,7 +3,7 @@
 source commonEnv
 
 cd ${RUN_DIR}
-git clone git@github.com:jsichi/fish-speech.git
+git clone https://github.com/jsichi/fish-speech.git
 
 source ${RUN_DIR}/venv/bin/activate
 
