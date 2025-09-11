@@ -2,8 +2,7 @@
 
 set -e
 
-SCRIPTEXEC="$(readlink -f "$0")"
-SRC_DIR="${SCRIPTEXEC%/*}"
+SRC_DIR="$(dirname -- "$(readlink -f -- "$0")")"
 RUN_DIR=${SRC_DIR}/run
 FISH_DIR=${RUN_DIR}/fish-speech
 
