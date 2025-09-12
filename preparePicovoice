@@ -1,4 +1,5 @@
 #!/bin/bash
+# Remember to also install wakewords and speakers
 
 source commonEnv
 
@@ -8,3 +9,10 @@ source ${RUN_DIR}/venv/bin/activate
 pip install pvporcupine
 pip install pvcobra
 pip install pvrecorder
+pip install pveagle
+
+mkdir -p ${RUN_DIR}/wakewords
+mkdir -p ${RUN_DIR}/speakers
+
+cp ~/Dropbox/schizolalia/*.ppn ${RUN_DIR}/wakewords
+cp ~/Dropbox/schizolalia/*.eagle ${RUN_DIR}/speakers

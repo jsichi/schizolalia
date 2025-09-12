@@ -12,7 +12,9 @@ from datetime import datetime
 
 import pvcobra
 import pvporcupine
+import pveagle
 from pvrecorder import PvRecorder
+from pveagle import EagleProfile
 
 from flux_led import BulbScanner, WifiLedBulb
 
@@ -62,6 +64,10 @@ def lightBulb(color):
     global bulb
     bulb.setRgb(*color)
 
+def loadSpeaker(filename):
+    with open(filename, 'rb') as speakerFile:
+        return EagleProfile.from_bytes(speakerFile.read())
+    
 def createWav(filename):
     wavFile = wave.open(filename, "w")
     wavFile.setnchannels(1)
@@ -92,7 +98,8 @@ def listenForWakeword(recorder, porcupine):
         if result >= 0:
             awake = True
 
-def collectInitialInput(recorder, cobra):
+def collectInitialInput(recorder, cobra, eagle, speakerNames):
+    eagle.reset()
     wavFile = createWav(inputFilename)
     collecting = True
     heardVoice = False
@@ -104,6 +111,13 @@ def collectInitialInput(recorder, cobra):
         if voiceProb > 0.5:
             silenceCount = 0
             heardVoice = True
+            scores = eagle.process(pcm)
+            maxScore = max(scores)
+            if maxScore > 0.3:
+                maxIndex = scores.index(maxScore)
+                print("Speaker:  " + speakerNames[maxIndex])
+                print(maxScore)
+                print()
         else:
             silenceCount += 1
             if heardVoice:
@@ -144,21 +158,19 @@ def processRestOfInput(recorder, cobra):
             infiles = [inputFilename, extraInputFilename]
             data = []
             for infile in infiles:
-                w = wave.open(infile, 'rb')
-                data.append([w.getparams(), w.readframes(w.getnframes())])
-                w.close()
-            output = wave.open(inputFilename, 'wb')
-            output.setparams(data[0][0])
-            output.writeframes(data[0][1])
-            output.writeframes(data[1][1])
-            output.close()
+                with wave.open(infile, 'rb') as w:
+                    data.append([w.getparams(), w.readframes(w.getnframes())])
+            with wave.open(inputFilename, 'wb') as output:
+                output.setparams(data[0][0])
+                output.writeframes(data[0][1])
+                output.writeframes(data[1][1])
         else:
             recordInput(messages, whisperResult)
             recordOutput(messages, tentativeResponse)
             return tentativeResponse
 
-def processInput(recorder, cobra):
-    if collectInitialInput(recorder, cobra):
+def processInput(recorder, cobra, eagle, speakerNames):
+    if collectInitialInput(recorder, cobra, eagle, speakerNames):
         lightBulb(blue)
         return processRestOfInput(recorder, cobra)
     else:
@@ -179,7 +191,7 @@ def main():
 
     picovoiceKey = config['picovoice']['AccessKey']
 
-    porcupineKeywordPaths = ['../wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn']
+    porcupineKeywordPaths = ['wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn']
     try:
         porcupine = pvporcupine.create(
             access_key=picovoiceKey,
@@ -195,6 +207,17 @@ def main():
         print("Failed to initialize Cobra")
         raise e
 
+    speakerNames = [
+        "speakers/pascal.eagle", "speakers/mia.eagle", "speakers/john.eagle",
+        "speakers/steve.eagle"
+    ]
+    speakerProfiles = list(map(loadSpeaker, speakerNames))
+    try:
+        eagle = pveagle.create_recognizer(picovoiceKey, speakerProfiles)
+    except pveagle.EagleError as e:
+        print("Failed to initialize Eagle")
+        raise e
+    
     global bulb
     bulbAddress = config['fluxled']['BulbAddress']
     bulb = WifiLedBulb(bulbAddress)
@@ -217,7 +240,7 @@ def main():
 
             while conversing:
                 lightBulb(green)
-                output = processInput(recorder, cobra)
+                output = processInput(recorder, cobra, eagle, speakerNames)
                 if output:
                     annotatedOutput = "(excited) " + output
 
@@ -234,6 +257,7 @@ def main():
         recorder.delete()
         porcupine.delete()
         cobra.delete()
+        eagle.delete()
 
 main()
 
