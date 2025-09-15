@@ -13,10 +13,11 @@ from datetime import datetime
 import pvcobra
 import pvporcupine
 import pveagle
+
 from pvrecorder import PvRecorder
 from pveagle import EagleProfile
-
 from flux_led import BulbScanner, WifiLedBulb
+from datetime import datetime
 
 from threading import Timer
 
@@ -36,8 +37,8 @@ green = (0, 255, 0)
 blue = (0, 0, 255)
 magenta = (255, 0, 255)
 
-inputFilename = "input.wav"
-extraInputFilename = "extra.wav"
+inputFilename = "input"
+extraInputFilename = "extra"
 stopCollecting = threading.Event()
 messages = []
 
@@ -48,14 +49,17 @@ whisperModel = whisper.load_model('base')
 def call_subprocess(script_path, *args):
     subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
 
-def speakText(text):
+def constructFilename(dir, name, seq):
+    return f"{dir}/{name}-{seq}.wav"
+
+def speakText(dir, text, seq):
     print("Saying:  " + text)
     call_subprocess(
         "fish-speech/tools/api_client.py",
         "--url", "http://localhost:8080/v1/tts",
         "-t", text,
         "--reference_id", "bubbles",
-        "--output", "output",
+        "--output", constructFilename(dir, "output", seq),
         "--latency", "balanced",
         "--use_memory_cache", "on",
         "--streaming", "True")
@@ -68,8 +72,8 @@ def loadSpeaker(filename):
     with open(filename, 'rb') as speakerFile:
         return EagleProfile.from_bytes(speakerFile.read())
     
-def createWav(filename):
-    wavFile = wave.open(filename, "w")
+def createWav(dir, filename, seq):
+    wavFile = wave.open(constructFilename(dir, filename, seq), "w")
     wavFile.setnchannels(1)
     wavFile.setsampwidth(2)
     wavFile.setframerate(16000)
@@ -98,9 +102,9 @@ def listenForWakeword(recorder, porcupine):
         if result >= 0:
             awake = True
 
-def collectInitialInput(recorder, cobra, eagle, speakerNames):
+def collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
     eagle.reset()
-    wavFile = createWav(inputFilename)
+    wavFile = createWav(dir, inputFilename, seq)
     collecting = True
     heardVoice = False
     silenceCount = 0
@@ -136,18 +140,18 @@ def recordInput(target, input):
 def recordOutput(target, output):
     target.append({"role": "assistant", "content": output}),
 
-def processRestOfInput(recorder, cobra):
+def processRestOfInput(recorder, cobra, dir, seq):
     global stillTalking
 
     while True:
         stillTalking = False
         stopCollecting.clear()
-        wavFile = createWav(extraInputFilename)
+        wavFile = createWav(dir, extraInputFilename, seq)
         collectThread = threading.Thread(
             target=collectInputChunk, args=(recorder, cobra, wavFile))
         collectThread.start()
         whisperResult = whisperModel.transcribe(
-            inputFilename, fp16=False, language='English')['text']
+            constructFilename(dir, inputFilename, seq), fp16=False, language='English')['text']
         print("Heard:  " + whisperResult)
         tentativeResponse = sendChat(whisperResult)
         print("Tentative response:  " + tentativeResponse)
@@ -158,21 +162,24 @@ def processRestOfInput(recorder, cobra):
             infiles = [inputFilename, extraInputFilename]
             data = []
             for infile in infiles:
-                with wave.open(infile, 'rb') as w:
+                with wave.open(f"{dir}/{infile}", 'rb') as w:
                     data.append([w.getparams(), w.readframes(w.getnframes())])
-            with wave.open(inputFilename, 'wb') as output:
+            with wave.open(constructFilename(dir, inputFilename, seq), 'wb') as output:
                 output.setparams(data[0][0])
                 output.writeframes(data[0][1])
                 output.writeframes(data[1][1])
         else:
             recordInput(messages, whisperResult)
             recordOutput(messages, tentativeResponse)
+            with open(dir + "/transcript.txt", 'a') as transcript:
+                print(f"[human:{seq}] {whisperResult}", file=transcript)
+                print(f"[Bubbles:{seq}] {tentativeResponse}", file=transcript)
             return tentativeResponse
 
-def processInput(recorder, cobra, eagle, speakerNames):
-    if collectInitialInput(recorder, cobra, eagle, speakerNames):
+def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
+    if collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
         lightBulb(blue)
-        return processRestOfInput(recorder, cobra)
+        return processRestOfInput(recorder, cobra, dir, seq)
     else:
         return ""
 
@@ -229,18 +236,25 @@ def main():
     recorder.start()
 
     bail = False
+    dirUnique = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dirSeq = 0
 
     try:
         while not bail:
+            dirSeq += 1
             lightBulb(gray)
             messages.clear()
             listenForWakeword(recorder, porcupine)
 
             conversing = True
+            dir = f"convos-{dirUnique}/c{dirSeq}"
+            os.makedirs(dir)
+            fileSeq = 0
 
             while conversing:
+                fileSeq += 1
                 lightBulb(green)
-                output = processInput(recorder, cobra, eagle, speakerNames)
+                output = processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
                 if output:
                     annotatedOutput = "(excited) " + output
 
@@ -248,7 +262,7 @@ def main():
                         (magenta, blue),
                         100,
                         "gradual")
-                    speakText(annotatedOutput)
+                    speakText(dir, annotatedOutput, fileSeq)
                 else:
                     conversing = False
 
