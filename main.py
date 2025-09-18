@@ -18,6 +18,7 @@ from pvrecorder import PvRecorder
 from pveagle import EagleProfile
 from flux_led import BulbScanner, WifiLedBulb
 from datetime import datetime
+from random import randrange
 
 import openai
 
@@ -311,21 +312,36 @@ def uiLoop():
     picListening = ImageTk.PhotoImage(file="images/bubbles/listening.jpg")
     picTalking = ImageTk.PhotoImage(file="images/bubbles/talking.jpg")
 
-    global imgOnCanvas
     imgOnCanvas = canvas.create_image(
-        screenWidth/2, screenHeight/2, image=picSleeping, anchor="center")
+        screenWidth/2, screenHeight/2, image=picSleeping, anchor="nw")
+
+    interval = 2000
+    sleeping = True
 
     def wakewordHeard(event):
+        nonlocal sleeping
+        sleeping = False
         canvas.itemconfig(imgOnCanvas, image=picListening)
 
     def inputProcessed(event):
         canvas.itemconfig(imgOnCanvas, image=picTalking)
 
     def convoFinished(event):
+        nonlocal sleeping
+        sleeping = True
         canvas.itemconfig(imgOnCanvas, image=picSleeping)
 
     def allDone(event):
         tkRoot.destroy()
+
+    def movePic():
+        if sleeping:
+            xNew = randrange(0, screenWidth - picSleeping.width())
+            yNew = randrange(0, screenHeight - picSleeping.height())
+            canvas.coords(imgOnCanvas, (xNew, yNew))
+        else:
+            canvas.coords(imgOnCanvas, (screenWidth/2, screenHeight/2))
+        tkRoot.after(interval, movePic)
 
     tkRoot.event_add("<<WakewordHeard>>", "<Control-Alt-KeyPress-x>")
     tkRoot.event_add("<<AllDone>>", "<Control-Alt-KeyPress-y>")
@@ -333,6 +349,7 @@ def uiLoop():
     tkRoot.bind("<<InputProcessed>>", inputProcessed)
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
     tkRoot.bind("<<AllDone>>", allDone)
+    tkRoot.after(interval, movePic)
     
     tkRoot.mainloop()
 
