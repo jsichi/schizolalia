@@ -19,9 +19,11 @@ from pveagle import EagleProfile
 from flux_led import BulbScanner, WifiLedBulb
 from datetime import datetime
 
-from threading import Timer
-
 import openai
+
+import tkinter as tk
+
+from PIL import ImageTk, Image
 
 client = openai.OpenAI(
     api_key="...",
@@ -40,6 +42,7 @@ magenta = (255, 0, 255)
 inputFilename = "input"
 extraInputFilename = "extra"
 stopCollecting = threading.Event()
+stopConvo = threading.Event()
 messages = []
 
 global bulb
@@ -81,7 +84,7 @@ def createWav(dir, filename, seq):
 
 def collectInputChunk(recorder, cobra, wavFile):
     silenceCount = 0
-    while (silenceCount < 40) or not stopCollecting.is_set():
+    while (silenceCount < 40) and not stopCollecting.is_set():
         pcm = recorder.read()
         voiceProb = cobra.process(pcm)
         wavFile.writeframes(struct.pack("h" * len(pcm), *pcm))
@@ -96,10 +99,11 @@ def collectInputChunk(recorder, cobra, wavFile):
 
 def listenForWakeword(recorder, porcupine):
     awake = False
-    while not awake:
+    while not awake and not stopConvo.is_set():
         pcm = recorder.read()
         result = porcupine.process(pcm)
         if result >= 0:
+            enqueueEvent("<<WakewordHeard>>")
             awake = True
 
 def collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
@@ -108,7 +112,7 @@ def collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
     collecting = True
     heardVoice = False
     silenceCount = 0
-    while collecting:
+    while collecting and not stopConvo.is_set():
         pcm = recorder.read()
         voiceProb = cobra.process(pcm)
         wavFile.writeframes(struct.pack("h" * len(pcm), *pcm))
@@ -143,7 +147,7 @@ def recordOutput(target, output):
 def processRestOfInput(recorder, cobra, dir, seq):
     global stillTalking
 
-    while True:
+    while not stopConvo.is_set():
         stillTalking = False
         stopCollecting.clear()
         wavFile = createWav(dir, extraInputFilename, seq)
@@ -192,7 +196,18 @@ def sendChat(input):
     responseText = chatResponse.choices[0].message.content
     return responseText
 
-def main():
+def enqueueEvent(event):
+    if not stopConvo.is_set():
+        global tkRoot
+        tkRoot.event_generate(event)
+
+def convoLoopThread():
+    try:
+        convoLoop()
+    finally:
+        enqueueEvent("<<AllDone>>")
+
+def convoLoop():
     config = configparser.ConfigParser()
     config.read('config.ini')
 
@@ -235,12 +250,11 @@ def main():
         frame_length=porcupine.frame_length)
     recorder.start()
 
-    bail = False
     dirUnique = datetime.now().strftime("%Y%m%d-%H%M%S")
     dirSeq = 0
 
     try:
-        while not bail:
+        while not stopConvo.is_set():
             dirSeq += 1
             lightBulb(gray)
             messages.clear()
@@ -256,6 +270,7 @@ def main():
                 lightBulb(green)
                 output = processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
                 if output:
+                    enqueueEvent("<<InputProcessed>>")
                     annotatedOutput = "(excited) " + output
 
                     bulb.setCustomPattern(
@@ -263,7 +278,9 @@ def main():
                         100,
                         "gradual")
                     speakText(dir, annotatedOutput, fileSeq)
+                    enqueueEvent("<<WakewordHeard>>")
                 else:
+                    enqueueEvent("<<ConvoFinished>>")
                     conversing = False
 
     finally:
@@ -272,6 +289,62 @@ def main():
         porcupine.delete()
         cobra.delete()
         eagle.delete()
+
+def uiLoop():
+    global tkRoot
+    tkRoot=tk.Tk()
+
+    screenHeight = tkRoot.winfo_screenheight()
+    screenWidth = tkRoot.winfo_screenwidth()
+    pad = 3
+    tkRoot.geometry("{0}x{1}+0+0".format(screenWidth - pad, screenHeight - pad))
+
+    canvas = tk.Canvas(
+        tkRoot, bg = "black",
+        height = screenHeight,
+        width = screenWidth)
+    canvas.pack()
+
+    tkRoot.update()
+
+    picSleeping = ImageTk.PhotoImage(file="images/bubbles/sleeping.jpg")
+    picListening = ImageTk.PhotoImage(file="images/bubbles/listening.jpg")
+    picTalking = ImageTk.PhotoImage(file="images/bubbles/talking.jpg")
+
+    global imgOnCanvas
+    imgOnCanvas = canvas.create_image(
+        screenWidth/2, screenHeight/2, image=picSleeping, anchor="center")
+
+    def wakewordHeard(event):
+        canvas.itemconfig(imgOnCanvas, image=picListening)
+
+    def inputProcessed(event):
+        canvas.itemconfig(imgOnCanvas, image=picTalking)
+
+    def convoFinished(event):
+        canvas.itemconfig(imgOnCanvas, image=picSleeping)
+
+    def allDone(event):
+        tkRoot.destroy()
+
+    tkRoot.event_add("<<WakewordHeard>>", "<Control-Alt-KeyPress-x>")
+    tkRoot.event_add("<<AllDone>>", "<Control-Alt-KeyPress-y>")
+    tkRoot.bind("<<WakewordHeard>>", wakewordHeard)
+    tkRoot.bind("<<InputProcessed>>", inputProcessed)
+    tkRoot.bind("<<ConvoFinished>>", convoFinished)
+    tkRoot.bind("<<AllDone>>", allDone)
+    
+    tkRoot.mainloop()
+
+def main():
+    convoThread = threading.Thread(target=convoLoopThread)
+    convoThread.start()
+    try:
+        uiLoop()
+    finally:
+        stopCollecting.set()
+        stopConvo.set()
+    convoThread.join()
 
 main()
 

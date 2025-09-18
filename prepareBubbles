@@ -3,7 +3,8 @@
 
 source commonEnv
 
-cp -r ${SRC_DIR}/samples/bubbles ${FISH_DIR}/references
+cp -r ~/Dropbox/schizolalia/samples/bubbles ${FISH_DIR}/references
+cp -r ~/Dropbox/schizolalia/images/bubbles ${RUN_DIR}/images
 
 cd ${SRC_DIR}
 ollama create bubbles -f models/bubbles

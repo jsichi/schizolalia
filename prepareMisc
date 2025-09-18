@@ -8,3 +8,6 @@ source ${RUN_DIR}/venv/bin/activate
 pip install flux_led
 pip install openai
 pip install openai-whisper
+pip install tk
+
+mkdir -p ${RUN_DIR}/images
