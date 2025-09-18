@@ -66,6 +66,7 @@ def speakText(dir, text, seq):
         "--output", constructFilename(dir, "output", seq),
         "--latency", "balanced",
         "--use_memory_cache", "on",
+        "--seed", "10",
         "--streaming", "True")
 
 def lightBulb(color):
