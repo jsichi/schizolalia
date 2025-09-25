@@ -350,6 +350,7 @@ def uiLoop():
     tkRoot.bind("<<InputProcessed>>", inputProcessed)
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
     tkRoot.bind("<<AllDone>>", allDone)
+    tkRoot.bind("<Escape>", allDone)
     tkRoot.after(interval, movePic)
     
     tkRoot.mainloop()
