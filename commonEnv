@@ -8,4 +8,4 @@ FISH_DIR=${RUN_DIR}/fish-speech
 
 export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_HOST=0.0.0.0:5000
-
+export OLLAMA_KV_CACHE_TYPE="q8_0"
