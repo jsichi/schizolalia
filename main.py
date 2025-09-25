@@ -344,8 +344,6 @@ def uiLoop():
             canvas.coords(imgOnCanvas, (screenWidth/2, screenHeight/2))
         tkRoot.after(interval, movePic)
 
-    tkRoot.event_add("<<WakewordHeard>>", "<Control-Alt-KeyPress-x>")
-    tkRoot.event_add("<<AllDone>>", "<Control-Alt-KeyPress-y>")
     tkRoot.bind("<<WakewordHeard>>", wakewordHeard)
     tkRoot.bind("<<InputProcessed>>", inputProcessed)
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
