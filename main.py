@@ -300,6 +300,7 @@ def uiLoop():
     screenWidth = tkRoot.winfo_screenwidth()
     pad = 3
     tkRoot.geometry("{0}x{1}+0+0".format(screenWidth - pad, screenHeight - pad))
+    tkRoot.attributes("-fullscreen", True)
     tkRoot.title("Let's Have A Chat!")
 
     canvas = tk.Canvas(
