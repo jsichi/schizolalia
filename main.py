@@ -16,7 +16,6 @@ import pveagle
 
 from pvrecorder import PvRecorder
 from pveagle import EagleProfile
-from flux_led import BulbScanner, WifiLedBulb
 from datetime import datetime
 from random import randrange
 
@@ -32,21 +31,11 @@ client = openai.OpenAI(
 
 import whisper
 
-gray = (10, 10, 10)
-black = (0, 0, 0)
-white = (255, 255, 255)
-red = (255, 0, 0)
-green = (0, 255, 0)
-blue = (0, 0, 255)
-magenta = (255, 0, 255)
-
 inputFilename = "input"
 extraInputFilename = "extra"
 stopCollecting = threading.Event()
 stopConvo = threading.Event()
 messages = []
-
-global bulb
 
 whisperModel = whisper.load_model('base')
 
@@ -69,10 +58,6 @@ def speakText(dir, text, seq):
         "--seed", "10",
         "--streaming", "True")
 
-def lightBulb(color):
-    global bulb
-    bulb.setRgb(*color)
-
 def loadSpeaker(filename):
     with open(filename, 'rb') as speakerFile:
         return EagleProfile.from_bytes(speakerFile.read())
@@ -92,7 +77,6 @@ def collectInputChunk(recorder, cobra, wavFile):
         wavFile.writeframes(struct.pack("h" * len(pcm), *pcm))
         if voiceProb > 0.5:
             global stillTalking
-            lightBulb(green)
             stillTalking = True
             silenceCount = 0
         else:
@@ -184,7 +168,6 @@ def processRestOfInput(recorder, cobra, dir, seq):
 
 def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
     if collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
-        lightBulb(blue)
         return processRestOfInput(recorder, cobra, dir, seq)
     else:
         return ""
@@ -242,12 +225,6 @@ def convoLoop():
         print("Failed to initialize Eagle")
         raise e
     
-    global bulb
-    bulbAddress = config['fluxled']['BulbAddress']
-    bulb = WifiLedBulb(bulbAddress)
-    bulb.turnOn()
-    bulb.refreshState()
-
     recorder = PvRecorder(
         frame_length=porcupine.frame_length)
     recorder.start()
@@ -258,7 +235,6 @@ def convoLoop():
     try:
         while not stopConvo.is_set():
             dirSeq += 1
-            lightBulb(gray)
             messages.clear()
             listenForWakeword(recorder, porcupine)
 
@@ -269,16 +245,11 @@ def convoLoop():
 
             while conversing:
                 fileSeq += 1
-                lightBulb(green)
                 output = processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
                 if output:
                     enqueueEvent("<<InputProcessed>>")
                     annotatedOutput = "(excited) " + output
 
-                    bulb.setCustomPattern(
-                        (magenta, blue),
-                        100,
-                        "gradual")
                     speakText(dir, annotatedOutput, fileSeq)
                     enqueueEvent("<<WakewordHeard>>")
                 else:
@@ -286,7 +257,6 @@ def convoLoop():
                     conversing = False
 
     finally:
-        lightBulb(black)
         recorder.delete()
         porcupine.delete()
         cobra.delete()
