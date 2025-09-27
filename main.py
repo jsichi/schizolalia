@@ -152,7 +152,7 @@ def processRestOfInput(recorder, cobra, dir, seq):
             infiles = [inputFilename, extraInputFilename]
             data = []
             for infile in infiles:
-                with wave.open(f"{dir}/{infile}", 'rb') as w:
+                with wave.open(constructFilename(dir, infile, seq), 'rb') as w:
                     data.append([w.getparams(), w.readframes(w.getnframes())])
             with wave.open(constructFilename(dir, inputFilename, seq), 'wb') as output:
                 output.setparams(data[0][0])
