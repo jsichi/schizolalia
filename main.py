@@ -180,10 +180,43 @@ def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
 def sendChat(input):
     tentative = messages.copy()
     recordInput(tentative, input)
+    defaultTool = {
+        'type': 'function',
+        'function': {
+            'name': 'defaultTool',
+            'description': (
+                'This is the default tool;'
+                'call this tool when none of the other tools seem to fit the request from the user.'
+            ),
+            'parameters': {
+            },
+        },
+    }
+    snoozeTool = {
+        'type': 'function',
+        'function': {
+            'name': 'snoozeTool',
+            'strict': 'true',
+            'description': 'Call this tool only when the user tells the assistant to go to sleep.',
+            'parameters': {
+            },
+        },
+    }
+    tools = [defaultTool, snoozeTool]
+    chatResponse = client.chat.completions.create(
+        model="bubbles",
+        messages=tentative,
+        tools=tools)
+    print(chatResponse)
+    response = chatResponse.choices[0]
+    for tool in response.message.tool_calls or []:
+        if tool.function.name == "snoozeTool":
+            return ""
     chatResponse = client.chat.completions.create(
         model="bubbles",
         messages=tentative)
-    responseText = chatResponse.choices[0].message.content
+    response = chatResponse.choices[0]
+    responseText = response.message.content
     return responseText
 
 def enqueueEvent(event):
@@ -320,6 +353,7 @@ def uiLoop():
         nonlocal sleeping
         sleeping = True
         canvas.itemconfig(imgOnCanvas, image=picSleeping)
+        tkRoot.after(3000, clearSubtitle)
 
     def allDone(event):
         tkRoot.destroy()
