@@ -40,7 +40,7 @@ messages = []
 
 subtitleQueue = queue.SimpleQueue()
 
-whisperModel = whisper.load_model('base')
+whisperModel = whisper.load_model('base.en')
 
 def call_subprocess(script_path, *args):
     subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
