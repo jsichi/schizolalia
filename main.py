@@ -7,6 +7,7 @@ import sys
 import struct
 import wave
 import threading
+import queue
 import time
 from datetime import datetime
 
@@ -36,6 +37,8 @@ extraInputFilename = "extra"
 stopCollecting = threading.Event()
 stopConvo = threading.Event()
 messages = []
+
+subtitleQueue = queue.SimpleQueue()
 
 whisperModel = whisper.load_model('base')
 
@@ -143,6 +146,8 @@ def processRestOfInput(recorder, cobra, dir, seq):
         whisperResult = whisperModel.transcribe(
             constructFilename(dir, inputFilename, seq), fp16=False, language='English')['text']
         print("Heard:  " + whisperResult)
+        subtitleQueue.put(whisperResult)
+        enqueueEvent("<<InputHeard>>")
         tentativeResponse = sendChat(whisperResult)
         print("Tentative response:  " + tentativeResponse)
         stopCollecting.set()
@@ -248,9 +253,11 @@ def convoLoop():
                 output = processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
                 if output:
                     enqueueEvent("<<InputProcessed>>")
+
                     annotatedOutput = "(excited) " + output
 
                     speakText(dir, annotatedOutput, fileSeq)
+
                     enqueueEvent("<<WakewordHeard>>")
                 else:
                     enqueueEvent("<<ConvoFinished>>")
@@ -288,8 +295,17 @@ def uiLoop():
     imgOnCanvas = canvas.create_image(
         screenWidth/2, screenHeight/2, image=picSleeping, anchor="nw")
 
+    subtitle = canvas.create_text(
+        screenWidth / 2, (9 * screenHeight) / 10,
+        width = (9 * screenHeight) / 10,
+        text="", font=("Arial", 40, "bold"),
+        fill="yellow", justify=tk.CENTER, anchor=tk.CENTER)
+
     interval = 2000
     sleeping = True
+
+    def clearSubtitle():
+        canvas.itemconfigure(subtitle, text="")
 
     def wakewordHeard(event):
         nonlocal sleeping
@@ -298,6 +314,7 @@ def uiLoop():
 
     def inputProcessed(event):
         canvas.itemconfig(imgOnCanvas, image=picTalking)
+        tkRoot.after(3000, clearSubtitle)
 
     def convoFinished(event):
         nonlocal sleeping
@@ -306,6 +323,9 @@ def uiLoop():
 
     def allDone(event):
         tkRoot.destroy()
+
+    def inputHeard(event):
+        canvas.itemconfigure(subtitle, text=subtitleQueue.get())
 
     def movePic():
         if sleeping:
@@ -320,9 +340,10 @@ def uiLoop():
     tkRoot.bind("<<InputProcessed>>", inputProcessed)
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
     tkRoot.bind("<<AllDone>>", allDone)
+    tkRoot.bind("<<InputHeard>>", inputHeard)
     tkRoot.bind("<Escape>", allDone)
     tkRoot.after(interval, movePic)
-    
+
     tkRoot.mainloop()
 
 def main():
