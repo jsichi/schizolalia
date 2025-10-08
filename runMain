@@ -6,5 +6,4 @@ source ${RUN_DIR}/venv/bin/activate
 
 cd ${RUN_DIR}
 
-ollama run bubbles ""
 python ${SRC_DIR}/main.py

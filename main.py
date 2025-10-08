@@ -26,9 +26,12 @@ import tkinter as tk
 
 from PIL import ImageTk, Image
 
+config = configparser.ConfigParser()
+config.read('config.ini')
+
 client = openai.OpenAI(
     api_key="...",
-    base_url="http://localhost:5000/v1")
+    base_url=config['openai-client']['Url'])
 
 import whisper
 
@@ -52,7 +55,7 @@ def speakText(dir, text, seq):
     print("Saying:  " + text)
     call_subprocess(
         "fish-speech/tools/api_client.py",
-        "--url", "http://localhost:8080/v1/tts",
+        "--url", config['tts-client']['Url'],
         "-t", text,
         "--reference_id", "bubbles",
         "--output", constructFilename(dir, "output", seq),
@@ -231,9 +234,6 @@ def convoLoopThread():
         enqueueEvent("<<AllDone>>")
 
 def convoLoop():
-    config = configparser.ConfigParser()
-    config.read('config.ini')
-
     picovoiceKey = config['picovoice']['AccessKey']
 
     porcupineKeywordPaths = ['wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn']
@@ -381,6 +381,11 @@ def uiLoop():
     tkRoot.mainloop()
 
 def main():
+    # warm up the model
+    client.chat.completions.create(
+        model="bubbles",
+        messages=[{"role":"user", "content":""}])
+
     convoThread = threading.Thread(target=convoLoopThread)
     convoThread.start()
     try:
