@@ -2,7 +2,7 @@
 
 source commonEnv
 
-sudo apt install portaudio19-dev libsox-dev ffmpeg python3-tk
+sudo apt install portaudio19-dev libsox-dev ffmpeg python3-tk python-is-python3
 
 mkdir -p ${RUN_DIR}
 cp ${SRC_DIR}/example.ini ${RUN_DIR}/config.ini
