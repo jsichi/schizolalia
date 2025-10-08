@@ -7,6 +7,7 @@ sudo apt install \
      build-essential python-dev-is-python3
 
 mkdir -p ${RUN_DIR}
+mkdir -p ${RUN_DIR}/images
 cp ${SRC_DIR}/example.ini ${RUN_DIR}/config.ini
 cd ${RUN_DIR}
 python -m venv venv
