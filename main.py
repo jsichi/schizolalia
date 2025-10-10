@@ -205,7 +205,25 @@ def sendChat(input):
             },
         },
     }
-    tools = [defaultTool, snoozeTool]
+    drawTool = {
+        'type': 'function',
+        'function': {
+            'name': 'drawTool',
+            'strict': 'true',
+            'description': 'Call this tool only when the user tells the assistant to draw.',
+            'parameters': {
+                'type': 'object',
+                'required': ['prompt'],
+                'properties': {
+                    'prompt': {
+                        'type': 'string',
+                        'description': 'The prompt to send to stable diffusion for rendering.',
+                    },
+                },
+            },
+        }
+    }
+    tools = [defaultTool, snoozeTool, drawTool]
     chatResponse = client.chat.completions.create(
         model="bubbles",
         messages=tentative,
@@ -215,6 +233,8 @@ def sendChat(input):
     for tool in response.message.tool_calls or []:
         if tool.function.name == "snoozeTool":
             return ""
+        if tool.function.name == "drawTool":
+            print("Prompt " + tool.function.arguments)
     chatResponse = client.chat.completions.create(
         model="bubbles",
         messages=tentative)
