@@ -5,7 +5,7 @@ source commonEnv
 
 cp -r ~/Dropbox/schizolalia/samples/bubbles ${FISH_DIR}/references
 cp -r ~/Dropbox/schizolalia/images/bubbles ${RUN_DIR}/images
-cp ~/Dropbox/schizolalia/Hey-Buttercup_en_linux_v3_0_0.ppn ${RUN_DIR}/wakewords
+cp ~/Dropbox/schizolalia/Hi-Bubbles_en_linux_v3_0_0.ppn ${RUN_DIR}/wakewords
 
 cd ${SRC_DIR}
 ollama create bubbles -f models/bubbles
