@@ -1,0 +1,11 @@
+#!/bin/bash
+# Requires listenOllama already running
+
+source commonEnv
+
+cp -r ~/Dropbox/schizolalia/samples/buttercup ${FISH_DIR}/references
+cp -r ~/Dropbox/schizolalia/images/buttercup ${RUN_DIR}/images
+cp ~/Dropbox/schizolalia/Hi-Bubbles_en_linux_v3_0_0.ppn ${RUN_DIR}/wakewords
+
+cd ${SRC_DIR}
+ollama create buttercup -f models/buttercup

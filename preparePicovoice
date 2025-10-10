@@ -14,5 +14,4 @@ pip install pveagle
 mkdir -p ${RUN_DIR}/wakewords
 mkdir -p ${RUN_DIR}/speakers
 
-cp ~/Dropbox/schizolalia/*.ppn ${RUN_DIR}/wakewords
 cp ~/Dropbox/schizolalia/*.eagle ${RUN_DIR}/speakers

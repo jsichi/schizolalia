@@ -1,4 +1,4 @@
-FROM llama3.3:70b-instruct-q2_K
+FROM gemma3:27b
 
 PARAMETER temperature 0.1
 
