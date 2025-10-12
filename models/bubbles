@@ -1,4 +1,4 @@
-FROM gemma3:27b
+FROM mistral-small3.2:24b
 
 PARAMETER temperature 0.1
 
