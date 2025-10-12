@@ -45,6 +45,12 @@ subtitleQueue = queue.SimpleQueue()
 
 whisperModel = whisper.load_model(config['whisper']['Model'], device="cuda")
 
+global character
+character = "bubbles"
+
+global tkRoot
+global stillTalking
+
 def call_subprocess(script_path, *args):
     subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
 
@@ -53,15 +59,18 @@ def constructFilename(dir, name, seq):
 
 def speakText(dir, text, seq):
     print("Saying:  " + text)
+    seed = "10"
+    if (character == "buttercup"):
+        seed = "20"
     call_subprocess(
         "fish-speech/tools/api_client.py",
         "--url", config['tts-client']['Url'],
         "-t", text,
-        "--reference_id", "bubbles",
+        "--reference_id", character,
         "--output", constructFilename(dir, "output", seq),
         "--latency", "balanced",
         "--use_memory_cache", "on",
-        "--seed", "10",
+        "--seed", seed,
         "--streaming", "True")
 
 def loadSpeaker(filename):
@@ -76,27 +85,49 @@ def createWav(dir, filename, seq):
     return wavFile
 
 def collectInputChunk(recorder, cobra, wavFile):
+    global stillTalking
+
     silenceCount = 0
     while (silenceCount < 40) and not stopCollecting.is_set():
         pcm = recorder.read()
         voiceProb = cobra.process(pcm)
         wavFile.writeframes(struct.pack("h" * len(pcm), *pcm))
         if voiceProb > 0.5:
-            global stillTalking
             stillTalking = True
             silenceCount = 0
         else:
             silenceCount += 1
     wavFile.close()
 
+def loadImages(name):
+    images = dict()
+    for state in ['sleeping', 'listening', 'talking']:
+        images[state] = ImageTk.PhotoImage(file=f"images/{name}/{state}.jpg")
+    return images
+
 def listenForWakeword(recorder, porcupine):
+    global character
     awake = False
     while not awake and not stopConvo.is_set():
         pcm = recorder.read()
         result = porcupine.process(pcm)
         if result >= 0:
+            if (result == 1):
+                character = "buttercup"
+            else:
+                character = "bubbles"
             enqueueEvent("<<WakewordHeard>>")
             awake = True
+
+def waitForSilence(recorder, cobra):
+    silenceCount = 0
+    while not stopConvo.is_set() and (silenceCount < 100):
+        pcm = recorder.read()
+        voiceProb = cobra.process(pcm)
+        if (voiceProb > 0.5):
+            silenceCount = 0
+        else:
+            silenceCount += 1
 
 def collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
     eagle.reset()
@@ -225,7 +256,7 @@ def sendChat(input):
     }
     tools = [defaultTool, snoozeTool, drawTool]
     chatResponse = client.chat.completions.create(
-        model="bubbles",
+        model=character,
         messages=tentative,
         tools=tools)
     print(chatResponse)
@@ -236,7 +267,7 @@ def sendChat(input):
         if tool.function.name == "drawTool":
             print("Prompt " + tool.function.arguments)
     chatResponse = client.chat.completions.create(
-        model="bubbles",
+        model=character,
         messages=tentative)
     response = chatResponse.choices[0]
     responseText = response.message.content
@@ -244,7 +275,6 @@ def sendChat(input):
 
 def enqueueEvent(event):
     if not stopConvo.is_set():
-        global tkRoot
         tkRoot.event_generate(event)
 
 def convoLoopThread():
@@ -256,7 +286,10 @@ def convoLoopThread():
 def convoLoop():
     picovoiceKey = config['picovoice']['AccessKey']
 
-    porcupineKeywordPaths = ['wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn']
+    porcupineKeywordPaths = [
+        'wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn',
+        'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn',
+    ]
     try:
         porcupine = pvporcupine.create(
             access_key=picovoiceKey,
@@ -307,9 +340,13 @@ def convoLoop():
                 if output:
                     enqueueEvent("<<InputProcessed>>")
 
-                    annotatedOutput = "(excited) " + output
+                    prefix = "(excited) "
+                    if (character == "buttercup"):
+                        prefix = "(angry) "
+                    annotatedOutput = prefix + output
 
                     speakText(dir, annotatedOutput, fileSeq)
+                    waitForSilence(recorder, cobra)
 
                     enqueueEvent("<<WakewordHeard>>")
                 else:
@@ -324,7 +361,7 @@ def convoLoop():
 
 def uiLoop():
     global tkRoot
-    tkRoot=tk.Tk()
+    tkRoot = tk.Tk()
 
     screenHeight = tkRoot.winfo_screenheight()
     screenWidth = tkRoot.winfo_screenwidth()
@@ -341,12 +378,12 @@ def uiLoop():
 
     tkRoot.update()
 
-    picSleeping = ImageTk.PhotoImage(file="images/bubbles/sleeping.jpg")
-    picListening = ImageTk.PhotoImage(file="images/bubbles/listening.jpg")
-    picTalking = ImageTk.PhotoImage(file="images/bubbles/talking.jpg")
-
-    imgOnCanvas = canvas.create_image(
-        screenWidth/2, screenHeight/2, image=picSleeping, anchor="nw")
+    characterImages = dict()
+    imagesOnCanvas = dict()
+    for name in ['bubbles', 'buttercup']:
+        characterImages[name] = loadImages(name)
+        imagesOnCanvas[name] = canvas.create_image(
+            screenWidth/2, screenHeight/2, image=characterImages[name]['sleeping'], anchor="nw")
 
     subtitle = canvas.create_text(
         screenWidth / 2, (9 * screenHeight) / 10,
@@ -363,16 +400,17 @@ def uiLoop():
     def wakewordHeard(event):
         nonlocal sleeping
         sleeping = False
-        canvas.itemconfig(imgOnCanvas, image=picListening)
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['listening'])
+        canvas.tag_raise(imagesOnCanvas[character])
 
     def inputProcessed(event):
-        canvas.itemconfig(imgOnCanvas, image=picTalking)
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['talking'])
         tkRoot.after(3000, clearSubtitle)
 
     def convoFinished(event):
         nonlocal sleeping
         sleeping = True
-        canvas.itemconfig(imgOnCanvas, image=picSleeping)
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['sleeping'])
         tkRoot.after(3000, clearSubtitle)
 
     def allDone(event):
@@ -383,11 +421,13 @@ def uiLoop():
 
     def movePic():
         if sleeping:
-            xNew = randrange(0, screenWidth - picSleeping.width())
-            yNew = randrange(0, screenHeight - picSleeping.height())
-            canvas.coords(imgOnCanvas, (xNew, yNew))
+            for name in characterImages.keys():
+                picSleeping = characterImages[name]['sleeping']
+                xNew = randrange(0, screenWidth - picSleeping.width())
+                yNew = randrange(0, screenHeight - picSleeping.height())
+                canvas.coords(imagesOnCanvas[name], (xNew, yNew))
         else:
-            canvas.coords(imgOnCanvas, (screenWidth/2, screenHeight/2))
+            canvas.coords(imagesOnCanvas[character], (screenWidth/2, screenHeight/2))
         tkRoot.after(interval, movePic)
 
     tkRoot.bind("<<WakewordHeard>>", wakewordHeard)
@@ -396,14 +436,14 @@ def uiLoop():
     tkRoot.bind("<<AllDone>>", allDone)
     tkRoot.bind("<<InputHeard>>", inputHeard)
     tkRoot.bind("<Escape>", allDone)
-    tkRoot.after(interval, movePic)
 
+    tkRoot.after(0, movePic)
     tkRoot.mainloop()
 
 def main():
     # warm up the model
     client.chat.completions.create(
-        model="bubbles",
+        model=character,
         messages=[{"role":"user", "content":""}])
 
     convoThread = threading.Thread(target=convoLoopThread)
