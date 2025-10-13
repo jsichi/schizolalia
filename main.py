@@ -231,7 +231,7 @@ def sendChat(input):
         'function': {
             'name': 'snoozeTool',
             'strict': 'true',
-            'description': 'Call this tool only when the user says to go to sleep.',
+            'description': 'Call this tool whenever the user says to go to sleep.',
             'parameters': {
             },
         },
@@ -241,7 +241,7 @@ def sendChat(input):
         'function': {
             'name': 'drawTool',
             'strict': 'true',
-            'description': 'Call this tool only when the user says to draw something.',
+            'description': 'Call this tool whenever the user says to draw something.',
             'parameters': {
                 'type': 'object',
                 'required': ['prompt'],
