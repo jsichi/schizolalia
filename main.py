@@ -61,7 +61,7 @@ def speakText(dir, text, seq):
     print("Saying:  " + text)
     seed = "10"
     if (character == "buttercup"):
-        seed = "20"
+        seed = "60"
     call_subprocess(
         "fish-speech/tools/api_client.py",
         "--url", config['tts-client']['Url'],
@@ -121,7 +121,7 @@ def listenForWakeword(recorder, porcupine):
 
 def waitForSilence(recorder, cobra):
     silenceCount = 0
-    while not stopConvo.is_set() and (silenceCount < 100):
+    while not stopConvo.is_set() and (silenceCount < 50):
         pcm = recorder.read()
         voiceProb = cobra.process(pcm)
         if (voiceProb > 0.5):
@@ -231,7 +231,7 @@ def sendChat(input):
         'function': {
             'name': 'snoozeTool',
             'strict': 'true',
-            'description': 'Call this tool only when the user tells the assistant to go to sleep.',
+            'description': 'Call this tool only when the user says to go to sleep.',
             'parameters': {
             },
         },
@@ -241,7 +241,7 @@ def sendChat(input):
         'function': {
             'name': 'drawTool',
             'strict': 'true',
-            'description': 'Call this tool only when the user tells the assistant to draw.',
+            'description': 'Call this tool only when the user says to draw something.',
             'parameters': {
                 'type': 'object',
                 'required': ['prompt'],
@@ -256,20 +256,24 @@ def sendChat(input):
     }
     tools = [defaultTool, snoozeTool, drawTool]
     chatResponse = client.chat.completions.create(
-        model=character,
-        messages=tentative,
-        tools=tools)
+        model = character,
+        messages = tentative,
+        tools = tools,
+        tool_choice = "any",
+        parallel_tool_calls = False)
     print(chatResponse)
     response = chatResponse.choices[0]
-    for tool in response.message.tool_calls or []:
-        if tool.function.name == "snoozeTool":
-            return ""
-        if tool.function.name == "drawTool":
-            print("Prompt " + tool.function.arguments)
-    chatResponse = client.chat.completions.create(
-        model=character,
-        messages=tentative)
-    response = chatResponse.choices[0]
+    if response.message.tool_calls:
+        for tool in response.message.tool_calls:
+            if tool.function.name == "snoozeTool":
+                return ""
+            if tool.function.name == "drawTool":
+                print("Prompt " + tool.function.arguments)
+        chatResponse = client.chat.completions.create(
+            model=character,
+            messages=tentative)
+        print(chatResponse)
+        response = chatResponse.choices[0]
     responseText = response.message.content
     return responseText
 
@@ -418,6 +422,7 @@ def uiLoop():
 
     def inputHeard(event):
         canvas.itemconfigure(subtitle, text=subtitleQueue.get())
+        canvas.tag_raise(subtitle)
 
     def movePic():
         if sleeping:
