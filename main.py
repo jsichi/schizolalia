@@ -258,9 +258,7 @@ def sendChat(input):
     chatResponse = client.chat.completions.create(
         model = character,
         messages = tentative,
-        tools = tools,
-        tool_choice = "any",
-        parallel_tool_calls = False)
+        tools = tools)
     print(chatResponse)
     response = chatResponse.choices[0]
     if response.message.tool_calls:
