@@ -1,0 +1,12 @@
+#!/bin/bash
+
+source commonEnv
+
+sudo apt install software-properties-common -y
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+sudo apt install python3.10-venv -y
+
+cd ${RUN_DIR}
+git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
+cd ${SD_DIR}
+python3.10 -m venv venv

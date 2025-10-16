@@ -8,6 +8,8 @@ import struct
 import wave
 import threading
 import queue
+import requests
+import base64
 import time
 from datetime import datetime
 
@@ -42,6 +44,7 @@ stopConvo = threading.Event()
 messages = []
 
 subtitleQueue = queue.SimpleQueue()
+imageQueue = queue.SimpleQueue()
 
 whisperModel = whisper.load_model(config['whisper']['Model'], device="cuda")
 
@@ -54,8 +57,14 @@ global stillTalking
 def call_subprocess(script_path, *args):
     subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
 
-def constructFilename(dir, name, seq):
-    return f"{dir}/{name}-{seq}.wav"
+def constructFilename(dir, name, seq, suffix):
+    return f"{dir}/{name}-{seq}{suffix}"
+
+def constructWavFilename(dir, name, seq):
+    return constructFilename(dir, name, seq, ".wav")
+
+def constructImgFilename(dir, name, seq):
+    return constructFilename(dir, name, seq, ".png")
 
 def speakText(dir, text, seq):
     print("Saying:  " + text)
@@ -67,7 +76,7 @@ def speakText(dir, text, seq):
         "--url", config['tts-client']['Url'],
         "-t", text,
         "--reference_id", character,
-        "--output", constructFilename(dir, "output", seq),
+        "--output", constructFilename(dir, "output", seq, ""),
         "--latency", "balanced",
         "--use_memory_cache", "on",
         "--seed", seed,
@@ -78,7 +87,7 @@ def loadSpeaker(filename):
         return EagleProfile.from_bytes(speakerFile.read())
     
 def createWav(dir, filename, seq):
-    wavFile = wave.open(constructFilename(dir, filename, seq), "w")
+    wavFile = wave.open(constructWavFilename(dir, filename, seq), "w")
     wavFile.setnchannels(1)
     wavFile.setsampwidth(2)
     wavFile.setframerate(16000)
@@ -178,22 +187,22 @@ def processRestOfInput(recorder, cobra, dir, seq):
             target=collectInputChunk, args=(recorder, cobra, wavFile))
         collectThread.start()
         whisperResult = whisperModel.transcribe(
-            constructFilename(dir, inputFilename, seq), fp16=False, language='English')['text']
+            constructWavFilename(dir, inputFilename, seq), fp16=False, language='English')['text']
         print("Heard:  " + whisperResult)
         subtitleQueue.put(whisperResult)
         enqueueEvent("<<InputHeard>>")
-        tentativeResponse = sendChat(whisperResult)
+        (tentativeResponse, toolCalled) = sendChat(dir, whisperResult, seq)
         print("Tentative response:  " + tentativeResponse)
         stopCollecting.set()
         collectThread.join()
-        if stillTalking:
+        if stillTalking and not toolCalled:
             print('Concatenating')
             infiles = [inputFilename, extraInputFilename]
             data = []
             for infile in infiles:
-                with wave.open(constructFilename(dir, infile, seq), 'rb') as w:
+                with wave.open(constructWavFilename(dir, infile, seq), 'rb') as w:
                     data.append([w.getparams(), w.readframes(w.getnframes())])
-            with wave.open(constructFilename(dir, inputFilename, seq), 'wb') as output:
+            with wave.open(constructWavFilename(dir, inputFilename, seq), 'wb') as output:
                 output.setparams(data[0][0])
                 output.writeframes(data[0][1])
                 output.writeframes(data[1][1])
@@ -211,7 +220,7 @@ def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
     else:
         return ""
 
-def sendChat(input):
+def sendChat(dir, input, seq):
     tentative = messages.copy()
     recordInput(tentative, input)
     defaultTool = {
@@ -264,16 +273,40 @@ def sendChat(input):
     if response.message.tool_calls:
         for tool in response.message.tool_calls:
             if tool.function.name == "snoozeTool":
-                return ""
+                return ("", True)
             if tool.function.name == "drawTool":
-                print("Prompt " + tool.function.arguments)
+                imgPrompt = tool.function.arguments
+                stylePrompt = "a kindergartener's crayon drawing, (cute:2), (pretty:2)"
+                if (character == "buttercup"):
+                    stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
+                    "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
+                print("Image prompt: " +  imgPrompt)
+                payload = {
+                    "prompt": f"{imgPrompt}, {stylePrompt}",
+                    "steps": 25,
+                    "width": 512,
+                    "height": 512,
+                    "seed": 10
+                }
+                sdUrl = config['stable-diffusion-client']['Url']
+                response = requests.post(
+                    url=f"{sdUrl}/txt2img",
+                    json=payload)
+                r = response.json()
+                imgFile = constructImgFilename(dir, "output", seq)
+                with open(imgFile, 'wb') as f:
+                    f.write(base64.b64decode(r['images'][0]))
+                imageQueue.put(imgFile)
+                enqueueEvent("<<ImageGenerated>>")
+                time.sleep(5)
+                return ("Tada!", True)
         chatResponse = client.chat.completions.create(
             model=character,
             messages=tentative)
         print(chatResponse)
         response = chatResponse.choices[0]
     responseText = response.message.content
-    return responseText
+    return (responseText, False)
 
 def enqueueEvent(event):
     if not stopConvo.is_set():
@@ -296,7 +329,7 @@ def convoLoop():
         porcupine = pvporcupine.create(
             access_key=picovoiceKey,
             keyword_paths=porcupineKeywordPaths,
-            sensitivities = [0.5] * len(porcupineKeywordPaths))
+            sensitivities = [0.25] * len(porcupineKeywordPaths))
     except pvporcupine.PorcupineError as e:
         print("Failed to initialize Porcupine")
         raise e
@@ -385,7 +418,12 @@ def uiLoop():
     for name in ['bubbles', 'buttercup']:
         characterImages[name] = loadImages(name)
         imagesOnCanvas[name] = canvas.create_image(
-            screenWidth/2, screenHeight/2, image=characterImages[name]['sleeping'], anchor="nw")
+            screenWidth/2, screenHeight/2, image=characterImages[name]['sleeping'], anchor=tk.NW)
+
+    outputPhoto = None
+    outputImage = canvas.create_image(
+        screenWidth/2, screenHeight/2, image=outputPhoto,
+        state=tk.HIDDEN, anchor=tk.CENTER)
 
     subtitle = canvas.create_text(
         screenWidth / 2, (9 * screenHeight) / 10,
@@ -413,14 +451,29 @@ def uiLoop():
         nonlocal sleeping
         sleeping = True
         canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['sleeping'])
+        canvas.itemconfig(outputImage, state=tk.HIDDEN)
         tkRoot.after(3000, clearSubtitle)
 
     def allDone(event):
         tkRoot.destroy()
 
     def inputHeard(event):
+        canvas.itemconfig(outputImage, state=tk.HIDDEN)
         canvas.itemconfigure(subtitle, text=subtitleQueue.get())
         canvas.tag_raise(subtitle)
+
+    def imageGenerated(event):
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['talking'])
+        imgFile = imageQueue.get()
+
+        nonlocal outputPhoto
+        outputPhoto = ImageTk.PhotoImage(file=imgFile)
+        canvas.itemconfig(
+            outputImage,
+            image=outputPhoto,
+            state=tk.NORMAL,
+            anchor=tk.CENTER)
+        canvas.tag_raise(outputImage)
 
     def movePic():
         if sleeping:
@@ -438,6 +491,7 @@ def uiLoop():
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
     tkRoot.bind("<<AllDone>>", allDone)
     tkRoot.bind("<<InputHeard>>", inputHeard)
+    tkRoot.bind("<<ImageGenerated>>", imageGenerated)
     tkRoot.bind("<Escape>", allDone)
 
     tkRoot.after(0, movePic)

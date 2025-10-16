@@ -1,0 +1,10 @@
+#!/bin/bash
+
+source commonEnv
+
+source ${SD_DIR}/venv/bin/activate
+
+cd ${SD_DIR}
+
+export SD_WEBUI_RESTARTING=1
+./webui.sh --xformers --api
