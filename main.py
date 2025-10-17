@@ -365,7 +365,7 @@ def convoLoop():
             listenForWakeword(recorder, porcupine)
 
             conversing = True
-            dir = f"convos-{dirUnique}/c{dirSeq}"
+            dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
             os.makedirs(dir)
             fileSeq = 0
 
