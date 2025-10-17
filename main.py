@@ -11,7 +11,7 @@ import queue
 import requests
 import base64
 import time
-from datetime import datetime
+import random
 
 import pvcobra
 import pvporcupine
@@ -21,6 +21,7 @@ from pvrecorder import PvRecorder
 from pveagle import EagleProfile
 from datetime import datetime
 from random import randrange
+from datetime import datetime
 
 import openai
 
@@ -299,7 +300,8 @@ def sendChat(dir, input, seq):
                 imageQueue.put(imgFile)
                 enqueueEvent("<<ImageGenerated>>")
                 time.sleep(2)
-                return ("Here it is!", True)
+                return (random.choice(
+                    "Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"), True)
         chatResponse = client.chat.completions.create(
             model=character,
             messages=tentative)
@@ -463,7 +465,6 @@ def uiLoop():
         canvas.tag_raise(subtitle)
 
     def imageGenerated(event):
-        canvas.coords(imagesOnCanvas[character], (0, 0))
         canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['talking'])
         imgFile = imageQueue.get()
 
@@ -484,7 +485,7 @@ def uiLoop():
                 yNew = randrange(0, screenHeight - picSleeping.height())
                 canvas.coords(imagesOnCanvas[name], (xNew, yNew))
         else:
-            canvas.coords(imagesOnCanvas[character], (screenWidth/2, screenHeight/2))
+            canvas.coords(imagesOnCanvas[character], (0, 0))
         tkRoot.after(interval, movePic)
 
     tkRoot.bind("<<WakewordHeard>>", wakewordHeard)
