@@ -301,7 +301,7 @@ def sendChat(dir, input, seq):
                 enqueueEvent("<<ImageGenerated>>")
                 time.sleep(2)
                 return (random.choice(
-                    "Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"), True)
+                    ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
         chatResponse = client.chat.completions.create(
             model=character,
             messages=tentative)
