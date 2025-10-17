@@ -13,4 +13,5 @@ cd ${RUN_DIR}
 python -m venv venv
 source ${RUN_DIR}/venv/bin/activate
 
+pip install --upgrade pip
 pip install -U "huggingface_hub[cli]"

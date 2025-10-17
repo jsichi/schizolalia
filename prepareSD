@@ -11,3 +11,5 @@ cd ${RUN_DIR}
 git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
 cd ${SD_DIR}
 ln -s ../venv venv
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+sed -i 's/transformers==.*/transformers>=4.36/g' requirements.txt requirements_versions.txt
