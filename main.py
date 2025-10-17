@@ -298,8 +298,8 @@ def sendChat(dir, input, seq):
                     f.write(base64.b64decode(r['images'][0]))
                 imageQueue.put(imgFile)
                 enqueueEvent("<<ImageGenerated>>")
-                time.sleep(5)
-                return ("Tada!", True)
+                time.sleep(2)
+                return ("Here it is!", True)
         chatResponse = client.chat.completions.create(
             model=character,
             messages=tentative)
@@ -463,6 +463,7 @@ def uiLoop():
         canvas.tag_raise(subtitle)
 
     def imageGenerated(event):
+        canvas.coords(imagesOnCanvas[character], (0, 0))
         canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['talking'])
         imgFile = imageQueue.get()
 
