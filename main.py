@@ -12,6 +12,8 @@ import requests
 import base64
 import time
 import random
+import string
+import json
 
 import pvcobra
 import pvporcupine
@@ -46,6 +48,7 @@ messages = []
 
 subtitleQueue = queue.SimpleQueue()
 imageQueue = queue.SimpleQueue()
+switchQueue = queue.SimpleQueue()
 
 whisperModel = whisper.load_model(config['whisper']['Model'], device="cuda")
 
@@ -221,6 +224,9 @@ def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
     else:
         return ""
 
+def cleanName(text):
+    return text.lower()
+
 def sendChat(dir, input, seq):
     tentative = messages.copy()
     recordInput(tentative, input)
@@ -264,49 +270,73 @@ def sendChat(dir, input, seq):
             },
         }
     }
-    tools = [defaultTool, snoozeTool, drawTool]
+    switchTool = {
+        'type': 'function',
+        'function': {
+            'name': 'switchTool',
+            'strict': 'true',
+            'description':
+            'Call this tool whenever the user wants to talk to a different character.',
+            'parameters': {
+                'type': 'object',
+                'required': ['character'],
+                'properties': {
+                    'character': {
+                        'type': 'string',
+                        'description': 'The character to switch to.',
+                    },
+                },
+            },
+        }
+    }
+    tools = [defaultTool, snoozeTool, drawTool, switchTool]
     chatResponse = client.chat.completions.create(
         model = character,
         messages = tentative,
         tools = tools)
     print(chatResponse)
     response = chatResponse.choices[0]
-    if response.message.tool_calls:
-        for tool in response.message.tool_calls:
-            if tool.function.name == "snoozeTool":
+    for tool in response.message.tool_calls or []:
+        if tool.function.name == "snoozeTool":
+            return ("", True)
+        if tool.function.name == 'switchTool':
+            newCharacter = cleanName(json.loads(tool.function.arguments)['character'])
+            print(f"Switch request:  {newCharacter}")
+            if (newCharacter == 'bubbles') or (newCharacter == 'buttercup'):
+                switchQueue.put(newCharacter)
                 return ("", True)
-            if tool.function.name == "drawTool":
-                imgPrompt = tool.function.arguments
-                stylePrompt = "a kindergartener's crayon drawing, (cute:2), (pretty:2)"
-                if (character == "buttercup"):
-                    stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
-                    "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
-                print("Image prompt: " +  imgPrompt)
-                payload = {
-                    "prompt": f"{imgPrompt}, {stylePrompt}",
-                    "steps": 25,
-                    "width": 512,
-                    "height": 512,
-                    "seed": 10
-                }
-                sdUrl = config['stable-diffusion-client']['Url']
-                response = requests.post(
-                    url=f"{sdUrl}/txt2img",
-                    json=payload)
-                r = response.json()
-                imgFile = constructImgFilename(dir, "output", seq)
-                with open(imgFile, 'wb') as f:
-                    f.write(base64.b64decode(r['images'][0]))
-                imageQueue.put(imgFile)
-                enqueueEvent("<<ImageGenerated>>")
-                time.sleep(2)
-                return (random.choice(
-                    ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
-        chatResponse = client.chat.completions.create(
-            model=character,
-            messages=tentative)
-        print(chatResponse)
-        response = chatResponse.choices[0]
+        if tool.function.name == "drawTool":
+            imgPrompt = json.loads(tool.function.arguments)['prompt']
+            stylePrompt = "a kindergartener's crayon drawing, (cute:2), (pretty:2)"
+            if (character == "buttercup"):
+                stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
+                "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
+            print("Image prompt: " +  imgPrompt)
+            payload = {
+                "prompt": f"{imgPrompt}, {stylePrompt}",
+                "steps": 25,
+                "width": 512,
+                "height": 512,
+                "seed": 10
+            }
+            sdUrl = config['stable-diffusion-client']['Url']
+            response = requests.post(
+                url=f"{sdUrl}/txt2img",
+                json=payload)
+            r = response.json()
+            imgFile = constructImgFilename(dir, "output", seq)
+            with open(imgFile, 'wb') as f:
+                f.write(base64.b64decode(r['images'][0]))
+            imageQueue.put(imgFile)
+            enqueueEvent("<<ImageGenerated>>")
+            time.sleep(2)
+            return (random.choice(
+                ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
+    chatResponse = client.chat.completions.create(
+        model=character,
+        messages=tentative)
+    print(chatResponse)
+    response = chatResponse.choices[0]
     responseText = response.message.content
     return (responseText, False)
 
@@ -321,6 +351,7 @@ def convoLoopThread():
         enqueueEvent("<<AllDone>>")
 
 def convoLoop():
+    global character
     picovoiceKey = config['picovoice']['AccessKey']
 
     porcupineKeywordPaths = [
@@ -364,7 +395,11 @@ def convoLoop():
         while not stopConvo.is_set():
             dirSeq += 1
             messages.clear()
-            listenForWakeword(recorder, porcupine)
+            if not switchQueue.empty():
+                character = switchQueue.get()
+                enqueueEvent("<<WakewordHeard>>")
+            else:
+                listenForWakeword(recorder, porcupine)
 
             conversing = True
             dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
