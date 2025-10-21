@@ -125,10 +125,11 @@ def listenForWakeword(recorder, porcupine):
         pcm = recorder.read()
         result = porcupine.process(pcm)
         if result >= 0:
-            if (result == 1):
-                character = "buttercup"
-            else:
-                character = "bubbles"
+            match result:
+                case 1:
+                    character = "buttercup"
+                case _:
+                    character = "bubbles"
             enqueueEvent("<<WakewordHeard>>")
             awake = True
 
@@ -302,15 +303,20 @@ def sendChat(dir, input, seq):
         if tool.function.name == 'switchTool':
             newCharacter = cleanName(json.loads(tool.function.arguments)['character'])
             print(f"Switch request:  {newCharacter}")
-            if (newCharacter == 'bubbles') or (newCharacter == 'buttercup'):
-                switchQueue.put(newCharacter)
-                return ("", True)
+            match newCharacter:
+                case 'bubbles' | 'buttercup' | 'sejong':
+                    switchQueue.put(newCharacter)
+                    return ("", True)
         if tool.function.name == "drawTool":
             imgPrompt = json.loads(tool.function.arguments)['prompt']
-            stylePrompt = "a kindergartener's crayon drawing, (cute:2), (pretty:2)"
-            if (character == "buttercup"):
-                stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
-                "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
+            match character:
+                case 'sejong':
+                    stylePrompt = "a pen and ink drawing in traditional Korean style"
+                case 'buttercup':
+                    stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
+                    "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
+                case _:
+                    stylePrompt = "a kindergartener's crayon drawing, (cute:2), (pretty:2)"
             print("Image prompt: " +  imgPrompt)
             payload = {
                 "prompt": f"{imgPrompt}, {stylePrompt}",
@@ -356,7 +362,7 @@ def convoLoop():
 
     porcupineKeywordPaths = [
         'wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn',
-        'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn',
+        'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn'
     ]
     try:
         porcupine = pvporcupine.create(
@@ -412,9 +418,13 @@ def convoLoop():
                 if output:
                     enqueueEvent("<<InputProcessed>>")
 
-                    prefix = "(excited) "
-                    if (character == "buttercup"):
-                        prefix = "(angry) "
+                    match character:
+                        case 'bubbles':
+                            prefix = "(excited) "
+                        case 'buttercup':
+                            prefix = "(angry) "
+                        case _:
+                            prefix = ""
                     annotatedOutput = prefix + output
 
                     speakText(dir, annotatedOutput, fileSeq)

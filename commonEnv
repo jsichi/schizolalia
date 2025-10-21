@@ -8,4 +8,4 @@ FISH_DIR=${RUN_DIR}/fish-speech
 SD_DIR=${RUN_DIR}/stable-diffusion-webui
 
 export OLLAMA_KEEP_ALIVE=-1
-export OLLAMA_HOST=0.0.0.0:5000
+export OLLAMA_HOST=earthsea.local:5000

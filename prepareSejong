@@ -1,0 +1,11 @@
+#!/bin/bash
+# Requires listenOllama already running
+
+source commonEnv
+
+cp -r ~/Dropbox/schizolalia/samples/sejong ${FISH_DIR}/references
+cp -r ~/Dropbox/schizolalia/images/sejong ${RUN_DIR}/images
+cp ~/Dropbox/schizolalia/jeonha_ko_linux_v3_0_0.ppn ${RUN_DIR}/wakewords
+
+cd ${SRC_DIR}
+ollama create sejong -f models/sejong
