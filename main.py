@@ -118,20 +118,26 @@ def loadImages(name):
         images[state] = ImageTk.PhotoImage(file=f"images/{name}/{state}.jpg")
     return images
 
-def listenForWakeword(recorder, porcupine):
+def listenForWakeword(recorder, porcupineEn, porcupineKo):
     global character
     awake = False
     while not awake and not stopConvo.is_set():
         pcm = recorder.read()
-        result = porcupine.process(pcm)
-        if result >= 0:
-            match result:
+        resultEn = porcupineEn.process(pcm)
+        resultKo = porcupineKo.process(pcm)
+        if resultEn >= 0:
+            match resultEn:
                 case 1:
                     character = "buttercup"
                 case _:
                     character = "bubbles"
             enqueueEvent("<<WakewordHeard>>")
             awake = True
+        else:
+            if resultKo >= 0:
+                character = "sejong"
+                enqueueEvent("<<WakewordHeard>>")
+                awake = True
 
 def waitForSilence(recorder, cobra):
     silenceCount = 0
@@ -191,8 +197,13 @@ def processRestOfInput(recorder, cobra, dir, seq):
         collectThread = threading.Thread(
             target=collectInputChunk, args=(recorder, cobra, wavFile))
         collectThread.start()
+        match character:
+            case 'sejong':
+                lang = 'Korean'
+            case _:
+                lang = 'English'
         whisperResult = whisperModel.transcribe(
-            constructWavFilename(dir, inputFilename, seq), fp16=False, language='English')['text']
+            constructWavFilename(dir, inputFilename, seq), fp16=False, language=lang)['text']
         print("Heard:  " + whisperResult)
         subtitleQueue.put(whisperResult)
         enqueueEvent("<<InputHeard>>")
@@ -290,9 +301,14 @@ def sendChat(dir, input, seq):
             },
         }
     }
+    firstModel = character
     tools = [defaultTool, snoozeTool, drawTool, switchTool]
+    if character == "sejong":
+        firstModel = "hf.co/unsloth/Llama-3.3-70B-Instruct-GGUF:IQ2_XXS"
+    else:
+        firstModel = character
     chatResponse = client.chat.completions.create(
-        model = character,
+        model = firstModel,
         messages = tentative,
         tools = tools)
     print(chatResponse)
@@ -338,12 +354,15 @@ def sendChat(dir, input, seq):
             time.sleep(2)
             return (random.choice(
                 ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
-    chatResponse = client.chat.completions.create(
-        model=character,
-        messages=tentative)
-    print(chatResponse)
-    response = chatResponse.choices[0]
+    if tools:
+        chatResponse = client.chat.completions.create(
+            model=character,
+            messages=tentative)
+        print(chatResponse)
+        response = chatResponse.choices[0]
     responseText = response.message.content
+    if character == "sejong":
+        responseText = "(pause) " + responseText
     return (responseText, False)
 
 def enqueueEvent(event):
@@ -360,15 +379,23 @@ def convoLoop():
     global character
     picovoiceKey = config['picovoice']['AccessKey']
 
-    porcupineKeywordPaths = [
+    porcupineKeywordPathsEn = [
         'wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn',
         'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn'
     ]
+    porcupineKeywordPathsKo = [
+        'wakewords/jeonha_ko_linux_v3_0_0.ppn',
+    ]
     try:
-        porcupine = pvporcupine.create(
+        porcupineEn = pvporcupine.create(
             access_key=picovoiceKey,
-            keyword_paths=porcupineKeywordPaths,
-            sensitivities = [0.25] * len(porcupineKeywordPaths))
+            keyword_paths=porcupineKeywordPathsEn,
+            sensitivities = [0.25] * len(porcupineKeywordPathsEn))
+        porcupineKo = pvporcupine.create(
+            access_key=picovoiceKey,
+            keyword_paths=porcupineKeywordPathsKo,
+            model_path='wakewords/porcupine_params_ko.pv',
+            sensitivities = [0.5] * len(porcupineKeywordPathsKo))
     except pvporcupine.PorcupineError as e:
         print("Failed to initialize Porcupine")
         raise e
@@ -391,7 +418,7 @@ def convoLoop():
         raise e
     
     recorder = PvRecorder(
-        frame_length=porcupine.frame_length)
+        frame_length=porcupineEn.frame_length)
     recorder.start()
 
     dirUnique = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -405,7 +432,7 @@ def convoLoop():
                 character = switchQueue.get()
                 enqueueEvent("<<WakewordHeard>>")
             else:
-                listenForWakeword(recorder, porcupine)
+                listenForWakeword(recorder, porcupineEn, porcupineKo)
 
             conversing = True
             dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
@@ -437,7 +464,8 @@ def convoLoop():
 
     finally:
         recorder.delete()
-        porcupine.delete()
+        porcupineEn.delete()
+        porcupineKo.delete()
         cobra.delete()
         eagle.delete()
 
@@ -462,7 +490,7 @@ def uiLoop():
 
     characterImages = dict()
     imagesOnCanvas = dict()
-    for name in ['bubbles', 'buttercup']:
+    for name in ['bubbles', 'buttercup', 'sejong']:
         characterImages[name] = loadImages(name)
         imagesOnCanvas[name] = canvas.create_image(
             screenWidth/2, screenHeight/2, image=characterImages[name]['sleeping'], anchor=tk.NW)

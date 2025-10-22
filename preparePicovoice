@@ -15,3 +15,5 @@ mkdir -p ${RUN_DIR}/wakewords
 mkdir -p ${RUN_DIR}/speakers
 
 cp ~/Dropbox/schizolalia/*.eagle ${RUN_DIR}/speakers
+wget -O ${RUN_DIR}/wakewords/porcupine_params_ko.pv \
+    https://github.com/Picovoice/porcupine/raw/refs/heads/master/lib/common/porcupine_params_ko.pv
