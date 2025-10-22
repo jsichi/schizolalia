@@ -9,5 +9,6 @@ sudo apt install libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev \
 cd ${RUN_DIR}
 git clone https://github.com/Panchovix/stable-diffusion-webui-reForge.git
 cd ${SD_DIR}
+git checkout newmain_newforge
 wget -O models/Stable-diffusion/v1-5-pruned-emaonly.safetensors \
      https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors?download=true
