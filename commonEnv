@@ -5,7 +5,7 @@ set -e
 SRC_DIR="$(dirname -- "$(readlink -f -- "$0")")"
 RUN_DIR=${SRC_DIR}/run
 FISH_DIR=${RUN_DIR}/fish-speech
-SD_DIR=${RUN_DIR}/stable-diffusion-webui
+SD_DIR=${RUN_DIR}/stable-diffusion-webui-reForge
 
 export OLLAMA_KEEP_ALIVE=-1
 export OLLAMA_HOST=earthsea.local:5000

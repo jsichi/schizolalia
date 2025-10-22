@@ -2,11 +2,6 @@
 
 source commonEnv
 
-source ${SD_DIR}/venv/bin/activate
-
 cd ${SD_DIR}
 
-export SD_WEBUI_RESTARTING=1
-export python_cmd=python3
-export TORCH_COMMAND="pip install torch==2.8.0"
-./webui.sh --api --skip-python-version-check
+./webui.sh --api --nowebui
