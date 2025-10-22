@@ -1,7 +1,6 @@
 #!/bin/bash
 
 source commonEnv
-source ${RUN_DIR}/venv/bin/activate
 
 sudo apt install libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev \
     libfreetype6-dev liblcms2-dev libwebp-dev tcl8.6-dev tk8.6-dev python3-tk \
@@ -10,6 +9,6 @@ sudo apt install libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev \
 cd ${RUN_DIR}
 git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git
 cd ${SD_DIR}
-ln -s ../venv venv
+python -m venv venv
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 sed -i 's/transformers==.*/transformers>=4.36/g' requirements.txt requirements_versions.txt
