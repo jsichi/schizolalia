@@ -33,6 +33,7 @@ from PIL import ImageTk, Image
 
 config = configparser.ConfigParser()
 config.read('config.ini')
+sdUrl = config['stable-diffusion-client']['Url']
 
 client = openai.OpenAI(
     api_key="...",
@@ -45,6 +46,7 @@ extraInputFilename = "extra"
 stopCollecting = threading.Event()
 stopConvo = threading.Event()
 messages = []
+lastImgPath = None
 
 subtitleQueue = queue.SimpleQueue()
 imageQueue = queue.SimpleQueue()
@@ -239,70 +241,105 @@ def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
 def cleanName(text):
     return text.lower()
 
+defaultTool = {
+    'type': 'function',
+    'function': {
+        'name': 'defaultTool',
+        'description': (
+            'This is the default tool;'
+            'call this tool when none of the other tools seem to fit the request from the user.'
+        ),
+        'parameters': {
+        },
+    },
+}
+snoozeTool = {
+    'type': 'function',
+    'function': {
+        'name': 'snoozeTool',
+        'strict': 'true',
+        'description': 'Call this tool whenever the user says to go to sleep.',
+        'parameters': {
+        },
+    },
+}
+drawTool = {
+    'type': 'function',
+    'function': {
+        'name': 'drawTool',
+        'strict': 'true',
+        'description': 'Call this tool whenever the user says to draw something.',
+        'parameters': {
+            'type': 'object',
+            'required': ['prompt'],
+            'properties': {
+                'prompt': {
+                    'type': 'string',
+                    'description': 'The prompt to send to stable diffusion for rendering.',
+                },
+            },
+        },
+    }
+}
+editTool = {
+    'type': 'function',
+    'function': {
+        'name': 'editTool',
+        'strict': 'true',
+        'description': 'Call this tool whenever the user wants to modify the current image.',
+        'parameters': {
+            'type': 'object',
+            'required': ['prompt'],
+            'properties': {
+                'prompt': {
+                    'type': 'string',
+                    'description': 'The prompt to send to stable diffusion '
+                    'for editing the current image.',
+                },
+            },
+        },
+    }
+}
+switchTool = {
+    'type': 'function',
+    'function': {
+        'name': 'switchTool',
+        'strict': 'true',
+        'description':
+        'Call this tool whenever the user wants to talk to a different character.',
+        'parameters': {
+            'type': 'object',
+            'required': ['character'],
+            'properties': {
+                'character': {
+                    'type': 'string',
+                    'description': 'The character to switch to.',
+                },
+            },
+        },
+    }
+}
+tools = [defaultTool, snoozeTool, drawTool, editTool, switchTool]
+
+def displayImg(dir, seq, response):
+    global lastImgPath
+    r = response.json()
+    imgFile = constructImgFilename(dir, "output", seq)
+    lastImgPath = imgFile
+    with open(imgFile, 'wb') as f:
+        f.write(base64.b64decode(r['images'][0]))
+        imageQueue.put(imgFile)
+        enqueueEvent("<<ImageGenerated>>")
+        time.sleep(2)
+
+def loadLastImg():
+    with open(lastImgPath, "rb") as file:
+        return base64.b64encode(file.read()).decode()
+
 def sendChat(dir, input, seq):
     tentative = messages.copy()
     recordInput(tentative, input)
-    defaultTool = {
-        'type': 'function',
-        'function': {
-            'name': 'defaultTool',
-            'description': (
-                'This is the default tool;'
-                'call this tool when none of the other tools seem to fit the request from the user.'
-            ),
-            'parameters': {
-            },
-        },
-    }
-    snoozeTool = {
-        'type': 'function',
-        'function': {
-            'name': 'snoozeTool',
-            'strict': 'true',
-            'description': 'Call this tool whenever the user says to go to sleep.',
-            'parameters': {
-            },
-        },
-    }
-    drawTool = {
-        'type': 'function',
-        'function': {
-            'name': 'drawTool',
-            'strict': 'true',
-            'description': 'Call this tool whenever the user says to draw something.',
-            'parameters': {
-                'type': 'object',
-                'required': ['prompt'],
-                'properties': {
-                    'prompt': {
-                        'type': 'string',
-                        'description': 'The prompt to send to stable diffusion for rendering.',
-                    },
-                },
-            },
-        }
-    }
-    switchTool = {
-        'type': 'function',
-        'function': {
-            'name': 'switchTool',
-            'strict': 'true',
-            'description':
-            'Call this tool whenever the user wants to talk to a different character.',
-            'parameters': {
-                'type': 'object',
-                'required': ['character'],
-                'properties': {
-                    'character': {
-                        'type': 'string',
-                        'description': 'The character to switch to.',
-                    },
-                },
-            },
-        }
-    }
     firstModel = character
-    tools = [defaultTool, snoozeTool, drawTool, switchTool]
     if character == "sejong":
         firstModel = "hf.co/unsloth/Llama-3.3-70B-Instruct-GGUF:IQ2_XXS"
     else:
@@ -313,47 +350,58 @@ def sendChat(dir, input, seq):
         tools = tools)
     print(chatResponse)
     response = chatResponse.choices[0]
-    for tool in response.message.tool_calls or []:
-        if tool.function.name == "snoozeTool":
-            return ("", True)
-        if tool.function.name == 'switchTool':
-            newCharacter = cleanName(json.loads(tool.function.arguments)['character'])
-            print(f"Switch request:  {newCharacter}")
-            match newCharacter:
-                case 'bubbles' | 'buttercup' | 'sejong':
-                    switchQueue.put(newCharacter)
-                    return ("", True)
-        if tool.function.name == "drawTool":
-            imgPrompt = json.loads(tool.function.arguments)['prompt']
-            match character:
-                case 'sejong':
-                    stylePrompt = "a pen and ink drawing in traditional Korean style"
-                case 'buttercup':
-                    stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
-                    "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
-                case _:
-                    stylePrompt = "a kindergartener's crayon drawing, (cute:2), (pretty:2)"
-            print("Image prompt: " +  imgPrompt)
-            payload = {
-                "prompt": f"{imgPrompt}, {stylePrompt}",
-                "steps": 25,
-                "width": 512,
-                "height": 512,
-                "seed": 10
-            }
-            sdUrl = config['stable-diffusion-client']['Url']
-            response = requests.post(
-                url=f"{sdUrl}/txt2img",
-                json=payload)
-            r = response.json()
-            imgFile = constructImgFilename(dir, "output", seq)
-            with open(imgFile, 'wb') as f:
-                f.write(base64.b64decode(r['images'][0]))
-            imageQueue.put(imgFile)
-            enqueueEvent("<<ImageGenerated>>")
-            time.sleep(2)
-            return (random.choice(
-                ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
+    for tool in response.message.tool_calls or []: 
+        match tool.function.name:
+            case 'snoozeTool':
+                return ("", True)
+            case 'switchTool':
+                newCharacter = cleanName(json.loads(tool.function.arguments)['character'])
+                print(f"Switch request:  {newCharacter}")
+                match newCharacter:
+                    case 'bubbles' | 'buttercup' | 'sejong':
+                        switchQueue.put(newCharacter)
+                        return ("", True)
+            case 'drawTool':
+                imgPrompt = json.loads(tool.function.arguments)['prompt']
+                match character:
+                    case 'sejong':
+                        stylePrompt = "a pen and ink drawing in traditional Korean style"
+                    case 'buttercup':
+                        stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
+                        "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
+                    case _:
+                        stylePrompt = "a kindergartener's drawing, (cute:2), (pretty:2), (crayon)"
+                print("Image prompt: " +  imgPrompt)
+                payload = {
+                    "prompt": f"{imgPrompt}, {stylePrompt}",
+                    "steps": 25,
+                    "width": 512,
+                    "height": 512,
+                    "seed": 10
+                }
+                response = requests.post(
+                    url=f"{sdUrl}/txt2img",
+                    json=payload)
+                displayImg(dir, seq, response)
+                return (random.choice(
+                    ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
+            case 'editTool':
+                if lastImgPath:
+                    editPrompt = json.loads(tool.function.arguments)['prompt']
+                    print("Edit prompt: " +  editPrompt)
+                    payload = {
+                        "prompt": editPrompt,
+                        "steps": 25,
+                        "width": 512,
+                        "height": 512,
+                        "seed": 10,
+                        "init_images": [loadLastImg()]
+                    }
+                    response = requests.post(
+                        url=f"{sdUrl}/img2img",
+                        json=payload)
+                    displayImg(dir, seq, response)
+                    return ("Done!", True)
     if tools:
         chatResponse = client.chat.completions.create(
             model=character,
