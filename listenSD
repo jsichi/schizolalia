@@ -2,6 +2,12 @@
 
 source commonEnv
 
-cd ${SD_DIR}
+cd ${AIME_DIR}
+source venv/bin/activate
+gnome-terminal --tab -e "python run_api_server.py"
 
-./webui.sh --api --nowebui
+echo "Waiting for AIME server initialization..."
+sleep 10
+
+cd ${AIME_SD_DIR}
+python main.py --model=models/sd3.5_medium.safetensors

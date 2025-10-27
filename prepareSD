@@ -1,14 +1,27 @@
 #!/bin/bash
 
 source commonEnv
+source ${RUN_DIR}/venv/bin/activate
 
-sudo apt install libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev \
-    libfreetype6-dev liblcms2-dev libwebp-dev tcl8.6-dev tk8.6-dev python3-tk \
-    libharfbuzz-dev libfribidi-dev libxcb1-dev
+pip install wheel
+pip install aiohttp
+pip install "git+https://github.com/aime-team/aime-api-client-interfaces.git#subdirectory=python"
 
 cd ${RUN_DIR}
-git clone https://github.com/Panchovix/stable-diffusion-webui-reForge.git
-cd ${SD_DIR}
-git checkout newmain_newforge
-wget -O models/Stable-diffusion/v1-5-pruned-emaonly.safetensors \
-     https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors?download=true
+git clone --recurse-submodules https://github.com/aime-team/aime-api-server.git
+cd ${AIME_DIR}
+git clone https://github.com/aime-labs/aime-api_stable_diffusion_3_5.git
+mkdir -p models
+cd models
+hf download --local-dir . stabilityai/stable-diffusion-3.5-medium \
+   sd3.5_medium.safetensors \
+   text_encoders/clip_l.safetensors text_encoders/clip_g.safetensors \
+   text_encoders/t5xxl_fp16.safetensors
+
+cd ${AIME_DIR}
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+cd ${AIME_SD_DIR}
+pip install -r requirements.txt

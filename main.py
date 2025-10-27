@@ -14,6 +14,8 @@ import time
 import random
 import string
 import json
+import asyncio
+import tempfile
 
 import pvcobra
 import pvporcupine
@@ -27,13 +29,15 @@ from datetime import datetime
 
 import openai
 
+import aime_api_client_interface
+
 import tkinter as tk
 
 from PIL import ImageTk, Image
 
 config = configparser.ConfigParser()
 config.read('config.ini')
-sdUrl = config['stable-diffusion-client']['Url']
+aimeUrl = config['aime-client']['Url']
 
 client = openai.OpenAI(
     api_key="...",
@@ -189,7 +193,7 @@ def recordInput(target, input):
 def recordOutput(target, output):
     target.append({"role": "assistant", "content": output}),
 
-def processRestOfInput(recorder, cobra, dir, seq):
+async def processRestOfInput(recorder, cobra, dir, seq):
     global stillTalking
 
     while not stopConvo.is_set():
@@ -209,7 +213,7 @@ def processRestOfInput(recorder, cobra, dir, seq):
         print("Heard:  " + whisperResult)
         subtitleQueue.put(whisperResult)
         enqueueEvent("<<InputHeard>>")
-        (tentativeResponse, toolCalled) = sendChat(dir, whisperResult, seq)
+        (tentativeResponse, toolCalled) = await sendChat(dir, whisperResult, seq)
         print("Tentative response:  " + tentativeResponse)
         stopCollecting.set()
         collectThread.join()
@@ -232,9 +236,9 @@ def processRestOfInput(recorder, cobra, dir, seq):
                 print(f"[Bubbles:{seq}] {tentativeResponse}", file=transcript)
             return tentativeResponse
 
-def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
+async def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
     if collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
-        return processRestOfInput(recorder, cobra, dir, seq)
+        return await processRestOfInput(recorder, cobra, dir, seq)
     else:
         return ""
 
@@ -323,20 +327,63 @@ tools = [defaultTool, snoozeTool, drawTool, editTool, switchTool]
 
 def displayImg(dir, seq, response):
     global lastImgPath
-    r = response.json()
     imgFile = constructImgFilename(dir, "output", seq)
     lastImgPath = imgFile
     with open(imgFile, 'wb') as f:
-        f.write(base64.b64decode(r['images'][0]))
-        imageQueue.put(imgFile)
-        enqueueEvent("<<ImageGenerated>>")
-        time.sleep(2)
+        img = response
+        f.write(base64.b64decode(img))
+    imageQueue.put(imgFile)
+    enqueueEvent("<<ImageGenerated>>")
+    time.sleep(2)
 
 def loadLastImg():
     with open(lastImgPath, "rb") as file:
-        return base64.b64encode(file.read()).decode()
+        return file.read()
 
-def sendChat(dir, input, seq):
+async def drawImg(prompt, initImage):
+    params = {
+        'prompt': prompt,
+        'seed': 10,
+        'height': 512,
+        'width': 512,
+        'steps': 25,
+        'image': initImage,
+        'provide_progress_images': 'latent',
+        'wait_for_result': True
+    }
+
+    # Call the AIME API
+    aimeApi = aime_api_client_interface.ModelAPI(
+        aimeUrl,
+        'stable_diffusion_3_5',
+        'admin',
+        '6a17e2a5-b706-03cb-1a32-94b4a1df67da')
+    aimeApi.do_api_login()
+
+    def progressCallback(progressInfo, progressData):
+        if progressData:
+            images = progressData.get('progress_images')
+            for i, img_b64 in enumerate(images or []):
+                header, imgData = img_b64.split(',', 1) if ',' in img_b64 else (None, img_b64)
+                (fd, imgFile) = tempfile.mkstemp(dir='/tmp')
+                with os.fdopen(fd, 'wb') as f:
+                    f.write(base64.b64decode(imgData))
+                imageQueue.put(imgFile)
+                enqueueEvent("<<ImageGenerated>>")
+
+    final = await aimeApi.do_api_request_async(
+        params,
+        None,
+        progressCallback)
+    await aimeApi.close_session()
+
+    images = final.get('images') or final.get('job_result', {}).get('images', [])
+    for i, img_b64 in enumerate(images):
+        header, img_data = img_b64.split(',', 1) if ',' in img_b64 else (None, img_b64)
+        return img_data
+    return ""
+    
+async def sendChat(dir, input, seq):
     tentative = messages.copy()
     recordInput(tentative, input)
     firstModel = character
@@ -363,6 +410,7 @@ def sendChat(dir, input, seq):
                         return ("", True)
             case 'drawTool':
                 imgPrompt = json.loads(tool.function.arguments)['prompt']
+                print("Image prompt: " +  imgPrompt)
                 match character:
                     case 'sejong':
                         stylePrompt = "a pen and ink drawing in traditional Korean style"
@@ -371,17 +419,7 @@ def sendChat(dir, input, seq):
                         "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
                     case _:
                         stylePrompt = "a kindergartener's drawing, (cute:2), (pretty:2), (crayon)"
-                print("Image prompt: " +  imgPrompt)
-                payload = {
-                    "prompt": f"{imgPrompt}, {stylePrompt}",
-                    "steps": 25,
-                    "width": 512,
-                    "height": 512,
-                    "seed": 10
-                }
-                response = requests.post(
-                    url=f"{sdUrl}/txt2img",
-                    json=payload)
+                response = await drawImg(f"{imgPrompt}, {stylePrompt}", None)
                 displayImg(dir, seq, response)
                 return (random.choice(
                     ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
@@ -389,17 +427,7 @@ def sendChat(dir, input, seq):
                 if lastImgPath:
                     editPrompt = json.loads(tool.function.arguments)['prompt']
                     print("Edit prompt: " +  editPrompt)
-                    payload = {
-                        "prompt": editPrompt,
-                        "steps": 25,
-                        "width": 512,
-                        "height": 512,
-                        "seed": 10,
-                        "init_images": [loadLastImg()]
-                    }
-                    response = requests.post(
-                        url=f"{sdUrl}/img2img",
-                        json=payload)
+                    response = await drawImg(editPrompt, loadLastImg())
                     displayImg(dir, seq, response)
                     return ("Done!", True)
     if tools:
@@ -419,11 +447,11 @@ def enqueueEvent(event):
 
 def convoLoopThread():
     try:
-        convoLoop()
+        asyncio.run(convoLoop())
     finally:
         enqueueEvent("<<AllDone>>")
 
-def convoLoop():
+async def convoLoop():
     global character
     picovoiceKey = config['picovoice']['AccessKey']
 
@@ -489,7 +517,7 @@ def convoLoop():
 
             while conversing:
                 fileSeq += 1
-                output = processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
+                output = await processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
                 if output:
                     enqueueEvent("<<InputProcessed>>")
 
@@ -590,7 +618,11 @@ def uiLoop():
         imgFile = imageQueue.get()
 
         nonlocal outputPhoto
-        outputPhoto = ImageTk.PhotoImage(file=imgFile)
+        img = Image.open(imgFile)
+        if imgFile.startswith("/tmp"):
+            os.remove(imgFile)
+        img = img.resize((512, 512), Image.Resampling.BICUBIC)
+        outputPhoto = ImageTk.PhotoImage(img)
         canvas.itemconfig(
             outputImage,
             image=outputPhoto,
