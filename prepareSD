@@ -11,12 +11,6 @@ cd ${RUN_DIR}
 git clone --recurse-submodules https://github.com/aime-team/aime-api-server.git
 cd ${AIME_DIR}
 git clone https://github.com/aime-labs/aime-api_stable_diffusion_3_5.git
-mkdir -p models
-cd models
-hf download --local-dir . stabilityai/stable-diffusion-3.5-medium \
-   sd3.5_medium.safetensors \
-   text_encoders/clip_l.safetensors text_encoders/clip_g.safetensors \
-   text_encoders/t5xxl_fp16.safetensors
 
 cd ${AIME_DIR}
 python -m venv venv
@@ -25,3 +19,9 @@ pip install -r requirements.txt
 
 cd ${AIME_SD_DIR}
 pip install -r requirements.txt
+mkdir -p models
+cd models
+hf download --local-dir . stabilityai/stable-diffusion-3.5-medium \
+   sd3.5_medium.safetensors \
+   text_encoders/clip_l.safetensors text_encoders/clip_g.safetensors \
+   text_encoders/t5xxl_fp16.safetensors
