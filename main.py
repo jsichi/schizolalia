@@ -120,7 +120,7 @@ def collectInputChunk(recorder, cobra, wavFile):
 
 def loadImages(name):
     images = dict()
-    for state in ['sleeping', 'listening', 'talking']:
+    for state in ['sleeping', 'listening', 'talking', 'drawing']:
         images[state] = ImageTk.PhotoImage(file=f"images/{name}/{state}.jpg")
     return images
 
@@ -317,6 +317,7 @@ switchTool = {
             'properties': {
                 'character': {
                     'type': 'string',
+                    'enum': ['bubbles', 'buttercup', 'sejong'],
                     'description': 'The character to switch to.',
                 },
             },
@@ -421,17 +422,17 @@ async def sendChat(dir, input, seq):
                         "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
                     case _:
                         stylePrompt = "a kindergartener's drawing, (cute:2), (pretty:2), (crayon)"
+                enqueueEvent("<<DrawingStarted>>")
                 response = await drawImg(f"{imgPrompt}, {stylePrompt}", None)
                 displayImg(dir, seq, response)
-                return (random.choice(
-                    ["Tada!", "Here ya go!", "Take a look!", "Done!", "Here it is!"]), True)
+                return ("#", True)
             case 'editTool':
                 if lastImgPath:
                     editPrompt = json.loads(tool.function.arguments)['prompt']
                     print("Edit prompt: " +  editPrompt)
                     response = await drawImg(editPrompt, loadLastImg())
                     displayImg(dir, seq, response)
-                    return ("Done!", True)
+                    return ("#", True)
     if tools:
         chatResponse = client.chat.completions.create(
             model=character,
@@ -520,25 +521,26 @@ async def convoLoop():
             while conversing:
                 fileSeq += 1
                 output = await processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
-                if output:
-                    enqueueEvent("<<InputProcessed>>")
+                match output:
+                    case "#":
+                        enqueueEvent("<<WakewordHeard>>")
+                    case "":
+                        enqueueEvent("<<ConvoFinished>>")
+                        conversing = False
+                    case _:
+                        enqueueEvent("<<InputProcessed>>")
 
-                    match character:
-                        case 'bubbles':
-                            prefix = "(excited) "
-                        case 'buttercup':
-                            prefix = "(angry) "
-                        case _:
-                            prefix = ""
-                    annotatedOutput = prefix + output
-
-                    speakText(dir, annotatedOutput, fileSeq)
-                    waitForSilence(recorder, cobra)
-
-                    enqueueEvent("<<WakewordHeard>>")
-                else:
-                    enqueueEvent("<<ConvoFinished>>")
-                    conversing = False
+                        match character:
+                            case 'bubbles':
+                                prefix = "(excited) "
+                            case 'buttercup':
+                                prefix = "(angry) "
+                            case _:
+                                prefix = ""
+                        annotatedOutput = prefix + output
+                        speakText(dir, annotatedOutput, fileSeq)
+                        waitForSilence(recorder, cobra)
+                        enqueueEvent("<<WakewordHeard>>")
 
     finally:
         recorder.delete()
@@ -615,8 +617,11 @@ def uiLoop():
         canvas.itemconfigure(subtitle, text=subtitleQueue.get())
         canvas.tag_raise(subtitle)
 
+    def drawingStarted(event):
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['drawing'])
+
     def imageGenerated(event):
-        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['talking'])
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['drawing'])
         imgFile = imageQueue.get()
 
         nonlocal outputPhoto
@@ -648,6 +653,7 @@ def uiLoop():
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
     tkRoot.bind("<<AllDone>>", allDone)
     tkRoot.bind("<<InputHeard>>", inputHeard)
+    tkRoot.bind("<<DrawingStarted>>", drawingStarted)
     tkRoot.bind("<<ImageGenerated>>", imageGenerated)
     tkRoot.bind("<Escape>", allDone)
 
