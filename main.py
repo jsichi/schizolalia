@@ -16,6 +16,7 @@ import string
 import json
 import asyncio
 import tempfile
+import imageio
 
 import pvcobra
 import pvporcupine
@@ -324,15 +325,27 @@ switchTool = {
         },
     }
 }
+snapshotTool = {
+    'type': 'function',
+    'function': {
+        'name': 'snapshotTool',
+        'strict': 'true',
+        'description': 'Call this tool whenever the user asks to take a picture.',
+        'parameters': {
+        },
+    },
+}
 tools = [defaultTool, snoozeTool, drawTool, editTool, switchTool]
 
-def displayImg(dir, seq, response):
-    global lastImgPath
+def saveImg(dir, seq, img):
     imgFile = constructImgFilename(dir, "output", seq)
-    lastImgPath = imgFile
     with open(imgFile, 'wb') as f:
-        img = response
-        f.write(base64.b64decode(img))
+        f.write(img)
+    return imgFile
+
+def displayImg(imgFile):
+    global lastImgPath
+    lastImgPath = imgFile
     imageQueue.put(imgFile)
     enqueueEvent("<<ImageGenerated>>")
     time.sleep(2)
@@ -424,15 +437,26 @@ async def sendChat(dir, input, seq):
                         stylePrompt = "a kindergartener's drawing, (cute:2), (pretty:2), (crayon)"
                 enqueueEvent("<<DrawingStarted>>")
                 response = await drawImg(f"{imgPrompt}, {stylePrompt}", None)
-                displayImg(dir, seq, response)
+                imgFile = saveImg(dir, seq, base64.b64decode(response))
+                displayImg(imgFile)
                 return ("#", True)
             case 'editTool':
                 if lastImgPath:
                     editPrompt = json.loads(tool.function.arguments)['prompt']
                     print("Edit prompt: " +  editPrompt)
                     response = await drawImg(editPrompt, loadLastImg())
-                    displayImg(dir, seq, response)
+                    imgFile = saveImg(dir, seq, base64.b64decode(response))
+                    displayImg(imgFile)
                     return ("#", True)
+            case 'snapshotTool':
+                print("Taking snapshot.")
+                camera = imageio.get_reader("<video0>")
+                screenshot = camera.get_data(0)
+                imgFile = constructImgFilename(dir, "output", seq)
+                imageio.imwrite(imgFile, screenshot)
+                displayImg(imgFile)
+                return ("#", True)
+
     if tools:
         chatResponse = client.chat.completions.create(
             model=character,
@@ -621,7 +645,6 @@ def uiLoop():
         canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['drawing'])
 
     def imageGenerated(event):
-        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['drawing'])
         imgFile = imageQueue.get()
 
         nonlocal outputPhoto
@@ -636,6 +659,7 @@ def uiLoop():
             state=tk.NORMAL,
             anchor=tk.CENTER)
         canvas.tag_raise(outputImage)
+        clearSubtitle()
 
     def movePic():
         if sleeping:
