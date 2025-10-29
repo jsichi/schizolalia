@@ -361,15 +361,17 @@ async def drawImg(prompt, initImage):
     aimeApi.do_api_login()
 
     def progressCallback(progressInfo, progressData):
+        print(progressInfo)
         if progressData:
-            images = progressData.get('progress_images')
-            for i, img_b64 in enumerate(images or []):
-                header, imgData = img_b64.split(',', 1) if ',' in img_b64 else (None, img_b64)
-                (fd, imgFile) = tempfile.mkstemp(dir='/tmp')
-                with os.fdopen(fd, 'wb') as f:
-                    f.write(base64.b64decode(imgData))
-                imageQueue.put(imgFile)
-                enqueueEvent("<<ImageGenerated>>")
+            if (progressInfo.get('progress') or 0) >= 20:
+                images = progressData.get('progress_images')
+                for i, img_b64 in enumerate(images or []):
+                    header, imgData = img_b64.split(',', 1) if ',' in img_b64 else (None, img_b64)
+                    (fd, imgFile) = tempfile.mkstemp(dir='/tmp')
+                    with os.fdopen(fd, 'wb') as f:
+                        f.write(base64.b64decode(imgData))
+                    imageQueue.put(imgFile)
+                    enqueueEvent("<<ImageGenerated>>")
 
     final = await aimeApi.do_api_request_async(
         params,
