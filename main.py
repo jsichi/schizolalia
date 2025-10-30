@@ -34,7 +34,7 @@ import aime_api_client_interface
 
 import tkinter as tk
 
-from PIL import ImageTk, Image
+from PIL import ImageTk, Image, ImageOps
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -354,6 +354,14 @@ def loadLastImg():
     with open(lastImgPath, "rb") as file:
         return file.read()
 
+def cameraSnapshot(dir, seq):
+    print("Taking snapshot.")
+    camera = imageio.get_reader("<video0>")
+    screenshot = camera.get_data(0)
+    imgFile = constructImgFilename(dir, "output", seq)
+    imageio.imwrite(imgFile, screenshot)
+    displayImg(imgFile)
+
 async def drawImg(prompt, initImage):
     params = {
         'prompt': prompt,
@@ -450,12 +458,7 @@ async def sendChat(dir, input, seq):
                     displayImg(imgFile)
                     return ("#", True)
             case 'snapshotTool':
-                print("Taking snapshot.")
-                camera = imageio.get_reader("<video0>")
-                screenshot = camera.get_data(0)
-                imgFile = constructImgFilename(dir, "output", seq)
-                imageio.imwrite(imgFile, screenshot)
-                displayImg(imgFile)
+                cameraSnapshot(dir, seq)
                 return ("#", True)
 
     if tools:
@@ -531,17 +534,18 @@ async def convoLoop():
     try:
         while not stopConvo.is_set():
             dirSeq += 1
+            dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
+            os.makedirs(dir)
+            fileSeq = 1
             messages.clear()
             if not switchQueue.empty():
                 character = switchQueue.get()
                 enqueueEvent("<<WakewordHeard>>")
             else:
                 listenForWakeword(recorder, porcupineEn, porcupineKo)
+                cameraSnapshot(dir, fileSeq)
 
             conversing = True
-            dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
-            os.makedirs(dir)
-            fileSeq = 0
 
             while conversing:
                 fileSeq += 1
@@ -652,7 +656,7 @@ def uiLoop():
         img = Image.open(imgFile)
         if imgFile.startswith("/tmp"):
             os.remove(imgFile)
-        img = img.resize((512, 512), Image.Resampling.BICUBIC)
+        img = ImageOps.contain(img, (512, 512))
         outputPhoto = ImageTk.PhotoImage(img)
         canvas.itemconfig(
             outputImage,
