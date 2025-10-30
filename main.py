@@ -330,7 +330,7 @@ snapshotTool = {
     'function': {
         'name': 'snapshotTool',
         'strict': 'true',
-        'description': 'Call this tool whenever the user asks to take a picture.',
+        'description': 'Call this tool whenever the user asks to take a picture, or asks what you see.',
         'parameters': {
         },
     },
