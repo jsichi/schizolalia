@@ -369,6 +369,7 @@ async def drawImg(prompt, initImage):
         'height': 512,
         'width': 512,
         'steps': 30,
+        'denoise': 0.3,
         'image': initImage,
         'provide_progress_images': 'latent',
         'wait_for_result': True
