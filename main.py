@@ -335,7 +335,7 @@ snapshotTool = {
         },
     },
 }
-tools = [defaultTool, snoozeTool, drawTool, editTool, switchTool]
+tools = [defaultTool, snoozeTool, drawTool, editTool, switchTool, snapshotTool]
 
 def saveImg(dir, seq, img):
     imgFile = constructImgFilename(dir, "output", seq)
@@ -360,7 +360,7 @@ async def drawImg(prompt, initImage):
         'seed': 10,
         'height': 512,
         'width': 512,
-        'steps': 25,
+        'steps': 40,
         'image': initImage,
         'provide_progress_images': 'latent',
         'wait_for_result': True
