@@ -360,7 +360,7 @@ async def drawImg(prompt, initImage):
         'seed': 10,
         'height': 512,
         'width': 512,
-        'steps': 40,
+        'steps': 30,
         'image': initImage,
         'provide_progress_images': 'latent',
         'wait_for_result': True
@@ -444,6 +444,7 @@ async def sendChat(dir, input, seq):
                 if lastImgPath:
                     editPrompt = json.loads(tool.function.arguments)['prompt']
                     print("Edit prompt: " +  editPrompt)
+                    enqueueEvent("<<DrawingStarted>>")
                     response = await drawImg(editPrompt, loadLastImg())
                     imgFile = saveImg(dir, seq, base64.b64decode(response))
                     displayImg(imgFile)
