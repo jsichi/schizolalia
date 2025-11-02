@@ -493,6 +493,7 @@ async def convoLoop():
     ]
     porcupineKeywordPathsKo = [
         'wakewords/jeonha_ko_linux_v3_0_0.ppn',
+        'wakewords/annyeonghasimnikka_ko_linux_v3_0_0.ppn',
     ]
     try:
         porcupineEn = pvporcupine.create(
