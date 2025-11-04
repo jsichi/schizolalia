@@ -1,5 +1,4 @@
 #!/bin/bash
-# Remember to also install wakewords and speakers
 
 source commonEnv
 
@@ -9,11 +8,8 @@ source ${RUN_DIR}/venv/bin/activate
 pip install pvporcupine
 pip install pvcobra
 pip install pvrecorder
-pip install pveagle
 
 mkdir -p ${RUN_DIR}/wakewords
-mkdir -p ${RUN_DIR}/speakers
 
-cp ~/Dropbox/schizolalia/*.eagle ${RUN_DIR}/speakers
 wget -O ${RUN_DIR}/wakewords/porcupine_params_ko.pv \
     https://github.com/Picovoice/porcupine/raw/refs/heads/master/lib/common/porcupine_params_ko.pv

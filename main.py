@@ -20,10 +20,8 @@ import imageio
 
 import pvcobra
 import pvporcupine
-import pveagle
 
 from pvrecorder import PvRecorder
-from pveagle import EagleProfile
 from datetime import datetime
 from random import randrange
 from datetime import datetime
@@ -93,10 +91,6 @@ def speakText(dir, text, seq):
         "--seed", seed,
         "--streaming", "True")
 
-def loadSpeaker(filename):
-    with open(filename, 'rb') as speakerFile:
-        return EagleProfile.from_bytes(speakerFile.read())
-    
 def createWav(dir, filename, seq):
     wavFile = wave.open(constructWavFilename(dir, filename, seq), "w")
     wavFile.setnchannels(1)
@@ -156,8 +150,7 @@ def waitForSilence(recorder, cobra):
         else:
             silenceCount += 1
 
-def collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
-    eagle.reset()
+def collectInitialInput(recorder, cobra, dir, seq):
     wavFile = createWav(dir, inputFilename, seq)
     collecting = True
     heardVoice = False
@@ -169,13 +162,6 @@ def collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
         if voiceProb > 0.5:
             silenceCount = 0
             heardVoice = True
-            scores = eagle.process(pcm)
-            maxScore = max(scores)
-            if maxScore > 0.3:
-                maxIndex = scores.index(maxScore)
-                print("Speaker:  " + speakerNames[maxIndex])
-                print(maxScore)
-                print()
         else:
             silenceCount += 1
             if heardVoice:
@@ -237,8 +223,8 @@ async def processRestOfInput(recorder, cobra, dir, seq):
                 print(f"[Bubbles:{seq}] {tentativeResponse}", file=transcript)
             return tentativeResponse
 
-async def processInput(recorder, cobra, eagle, dir, speakerNames, seq):
-    if collectInitialInput(recorder, cobra, eagle, dir, speakerNames, seq):
+async def processInput(recorder, cobra, dir, seq):
+    if collectInitialInput(recorder, cobra, dir, seq):
         return await processRestOfInput(recorder, cobra, dir, seq)
     else:
         return ""
@@ -515,17 +501,6 @@ async def convoLoop():
         print("Failed to initialize Cobra")
         raise e
 
-    speakerNames = [
-        "speakers/pascal.eagle", "speakers/mia.eagle", "speakers/john.eagle",
-        "speakers/steve.eagle"
-    ]
-    speakerProfiles = list(map(loadSpeaker, speakerNames))
-    try:
-        eagle = pveagle.create_recognizer(picovoiceKey, speakerProfiles)
-    except pveagle.EagleError as e:
-        print("Failed to initialize Eagle")
-        raise e
-    
     recorder = PvRecorder(
         frame_length=porcupineEn.frame_length)
     recorder.start()
@@ -551,7 +526,7 @@ async def convoLoop():
 
             while conversing:
                 fileSeq += 1
-                output = await processInput(recorder, cobra, eagle, dir, speakerNames, fileSeq)
+                output = await processInput(recorder, cobra, dir, fileSeq)
                 match output:
                     case "#":
                         enqueueEvent("<<WakewordHeard>>")
@@ -578,7 +553,6 @@ async def convoLoop():
         porcupineEn.delete()
         porcupineKo.delete()
         cobra.delete()
-        eagle.delete()
 
 def uiLoop():
     global tkRoot
