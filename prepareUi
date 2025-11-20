@@ -8,4 +8,6 @@ source ${RUN_DIR}/venv/bin/activate
 pip install openai
 pip install openai-whisper
 pip install tk
+pip install cv2
+pip install face-recognition
 pip install imageio[ffmpeg]

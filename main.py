@@ -32,7 +32,10 @@ import aime_api_client_interface
 
 import tkinter as tk
 
-from PIL import ImageTk, Image, ImageOps
+import cv2
+import face_recognition
+
+from PIL import ImageTk, Image, ImageOps, ImageDraw
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -48,6 +51,7 @@ inputFilename = "input"
 extraInputFilename = "extra"
 stopCollecting = threading.Event()
 stopConvo = threading.Event()
+humanRecognized = threading.Event()
 messages = []
 lastImgPath = None
 
@@ -57,11 +61,97 @@ switchQueue = queue.SimpleQueue()
 
 whisperModel = whisper.load_model(config['whisper']['Model'], device="cuda")
 
+immichUrl = config['immich']['Url']
+immichHeaders = {
+    'Accept': 'application/json',
+    'x-api-key': config['immich']['ApiKey']
+}
+
 global character
-character = "bubbles"
+character = "no one"
+
+global human
+human = "A Stranger"
 
 global tkRoot
 global stillTalking
+global webcam
+global webcamFile
+
+def drawBoundingBox(img, coords):
+    draw = ImageDraw.Draw(img)
+    color = (0, 255, 0)
+    draw.rectangle(coords, outline=color, width=3)
+
+class Webcam:
+    def __init__(self, window, width=512, height=512):
+        self.window = window
+        self.width = width
+        self.height = height
+
+    def show(self):
+        assert(webcamFile)
+        self.frameCount = 0
+        self.found = False
+        self.cap = cv2.VideoCapture(0)
+        self.label = tk.Label(self.window, width=self.width, height=self.height)
+        self.label.pack()
+        self.label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        self.showFrames()
+
+    def showFrames(self):
+        recognized = False
+        cv2image = cv2.cvtColor(self.cap.read()[1], cv2.COLOR_BGR2RGB)
+        locs = face_recognition.api.face_locations(cv2image, 1, "hog")
+        imgOrig = Image.fromarray(cv2image)
+        img = imgOrig.transpose(Image.FLIP_LEFT_RIGHT)
+        color = (255, 0, 0)
+        if self.found:
+            img.save(webcamFile)
+            recognizeFace(webcamFile)
+            recognized = True
+            print(human)
+            draw = ImageDraw.Draw(img)
+            draw.text((50, 50), human, color, font_size=50)
+        else:
+            self.frameCount += 1
+            if locs and (self.frameCount > 20):
+                loc = locs[0]
+                xLeft = loc[3]
+                yTop = loc[0]
+                xRight = loc[1]
+                yBottom = loc[2]
+                # FLIP_LEFT_RIGHT for bounding box as well
+                xLeft = img.width - xLeft
+                xRight = img.width - xRight
+                coords = (xRight, yTop, xLeft, yBottom)
+                drawBoundingBox(img, coords)
+                self.found = True
+            else:
+                draw = ImageDraw.Draw(img)
+                for _ in range(10):
+                    x1 = random.randint(0, img.width)
+                    x2 = random.randint(0, img.width)
+                    y1 = random.randint(0, img.height)
+                    y2 = random.randint(0, img.height)
+                    draw.line([(x1,y1),(x2,y2)], color)
+        imgtk = ImageTk.PhotoImage(image=img)  # Convert image to PhotoImage
+        self.label.imgtk = imgtk
+        self.label.configure(image=imgtk)
+        if recognized:
+            humanRecognized.set()
+        else:
+            self.label.after(20, self.showFrames)
+
+    def hide(self):
+        if self.label:
+            self.label.destroy()
+        self.label = None
+        if self.cap:
+            self.cap.release()
+        self.cap = None
+        global webcamFile
+        webcamFile = None
 
 def call_subprocess(script_path, *args):
     subprocess.run(["python", script_path, *args], capture_output=True, text=True, check=True)
@@ -140,6 +230,10 @@ def listenForWakeword(recorder, porcupineEn, porcupineKo):
                 enqueueEvent("<<WakewordHeard>>")
                 awake = True
 
+def waitForHumanRecognition():
+    while not stopConvo.is_set() and not humanRecognized.is_set():
+        time.sleep(1)
+
 def waitForSilence(recorder, cobra):
     silenceCount = 0
     while not stopConvo.is_set() and (silenceCount < 50):
@@ -180,6 +274,13 @@ def recordInput(target, input):
 def recordOutput(target, output):
     target.append({"role": "assistant", "content": output}),
 
+def recordExchange(target, input, output, dir, seq):
+    recordInput(messages, input)
+    recordOutput(messages, output)
+    with open(dir + "/transcript.txt", 'a') as transcript:
+        print(f"[{human}:{seq}] {input}", file=transcript)
+        print(f"[{character}:{seq}] {output}", file=transcript)
+
 async def processRestOfInput(recorder, cobra, dir, seq):
     global stillTalking
 
@@ -216,11 +317,7 @@ async def processRestOfInput(recorder, cobra, dir, seq):
                 output.writeframes(data[0][1])
                 output.writeframes(data[1][1])
         else:
-            recordInput(messages, whisperResult)
-            recordOutput(messages, tentativeResponse)
-            with open(dir + "/transcript.txt", 'a') as transcript:
-                print(f"[human:{seq}] {whisperResult}", file=transcript)
-                print(f"[Bubbles:{seq}] {tentativeResponse}", file=transcript)
+            recordExchange(messages, whisperResult, tentativeResponse, dir, seq)
             return tentativeResponse
 
 async def processInput(recorder, cobra, dir, seq):
@@ -339,6 +436,60 @@ def displayImg(imgFile):
 def loadLastImg():
     with open(lastImgPath, "rb") as file:
         return file.read()
+
+def uploadImmich(file):
+    stats = os.stat(file)
+    data = {
+        'deviceAssetId': f'{file}-{stats.st_mtime}',
+        'deviceId': 'schizolalia',
+        'fileCreatedAt': datetime.fromtimestamp(stats.st_mtime),
+        'fileModifiedAt': datetime.fromtimestamp(stats.st_mtime),
+        'isFavorite': 'false',
+    }
+    files = {
+        'assetData': open(file, 'rb')
+    }
+    response = requests.post(
+        f'{immichUrl}/assets', headers=immichHeaders, data=data, files=files)
+    json = response.json()
+    print(json)
+    return json['id']
+
+def waitForImmich():
+    busy = True
+    while busy:
+        response = requests.get(
+            f'{immichUrl}/jobs', headers=immichHeaders)
+        json = response.json()
+        busy = False
+        for index, key in enumerate(json):
+            active = json[key]['queueStatus']['isActive']
+            if active:
+                busy = True
+
+def recognizeFace(imgFile):
+    assetId = uploadImmich(imgFile)
+    waitForImmich()
+    response = requests.get(
+        f'{immichUrl}/assets/{assetId}', headers=immichHeaders)
+    json = response.json()
+    print(json)
+    people = json['people']
+    if people:
+        person = people[0]
+        global human
+        human = person['name']
+        faces = person['faces']
+        if len(faces) == 1:
+            face = faces[0]
+            img = Image.open(imgFile)
+            coords = (
+                face['boundingBoxX1'], face['boundingBoxY1'],
+                face['boundingBoxX2'], face['boundingBoxY2']
+            )
+            drawBoundingBox(img, coords)
+            img.save(imgFile)
+            print(faces[0])
 
 def cameraSnapshot(dir, seq):
     print("Taking snapshot.")
@@ -515,21 +666,34 @@ async def convoLoop():
             os.makedirs(dir)
             fileSeq = 1
             messages.clear()
+            initialInput = ""
             if not switchQueue.empty():
                 character = switchQueue.get()
-                enqueueEvent("<<WakewordHeard>>")
+                enqueueEvent("<<ConvoStarted>>")
             else:
+                global webcamFile
+                webcamFile = constructImgFilename(dir, "output", fileSeq)
                 listenForWakeword(recorder, porcupineEn, porcupineKo)
-                cameraSnapshot(dir, fileSeq)
+                waitForHumanRecognition()
+                if stopConvo.is_set():
+                    break
+                initialInput = f"Hello, I am {human}"
 
             conversing = True
 
             while conversing:
                 fileSeq += 1
-                output = await processInput(recorder, cobra, dir, fileSeq)
+                if initialInput:
+                    (response, toolCalled) = await sendChat(dir, initialInput, fileSeq)
+                    print("Greeting response:  " + response)
+                    recordExchange(messages, initialInput, response, dir, fileSeq)
+                    output = response
+                    initialInput = ""
+                else:
+                    output = await processInput(recorder, cobra, dir, fileSeq)
                 match output:
                     case "#":
-                        enqueueEvent("<<WakewordHeard>>")
+                        enqueueEvent("<<ConvoStarted>>")
                     case "":
                         enqueueEvent("<<ConvoFinished>>")
                         conversing = False
@@ -546,7 +710,7 @@ async def convoLoop():
                         annotatedOutput = prefix + output
                         speakText(dir, annotatedOutput, fileSeq)
                         waitForSilence(recorder, cobra)
-                        enqueueEvent("<<WakewordHeard>>")
+                        enqueueEvent("<<ConvoStarted>>")
 
     finally:
         recorder.delete()
@@ -556,6 +720,7 @@ async def convoLoop():
 
 def uiLoop():
     global tkRoot
+    global webcam
     tkRoot = tk.Tk()
 
     screenHeight = tkRoot.winfo_screenheight()
@@ -591,6 +756,8 @@ def uiLoop():
         text="", font=("Arial", 40, "bold"),
         fill="yellow", justify=tk.CENTER, anchor=tk.CENTER)
 
+    webcam = Webcam(canvas)
+
     interval = 2000
     sleeping = True
 
@@ -600,6 +767,13 @@ def uiLoop():
     def wakewordHeard(event):
         nonlocal sleeping
         sleeping = False
+        canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['talking'])
+        canvas.tag_raise(imagesOnCanvas[character])
+        humanRecognized.clear()
+        webcam.show()
+
+    def convoStarted(event):
+        webcam.hide()
         canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['listening'])
         canvas.tag_raise(imagesOnCanvas[character])
 
@@ -610,6 +784,8 @@ def uiLoop():
     def convoFinished(event):
         nonlocal sleeping
         sleeping = True
+        global human
+        human = "A Stranger"
         canvas.itemconfig(imagesOnCanvas[character], image=characterImages[character]['sleeping'])
         canvas.itemconfig(outputImage, state=tk.HIDDEN)
         tkRoot.after(3000, clearSubtitle)
@@ -654,6 +830,7 @@ def uiLoop():
         tkRoot.after(interval, movePic)
 
     tkRoot.bind("<<WakewordHeard>>", wakewordHeard)
+    tkRoot.bind("<<ConvoStarted>>", convoStarted)
     tkRoot.bind("<<InputProcessed>>", inputProcessed)
     tkRoot.bind("<<ConvoFinished>>", convoFinished)
     tkRoot.bind("<<AllDone>>", allDone)
@@ -668,7 +845,7 @@ def uiLoop():
 def main():
     # warm up the model
     client.chat.completions.create(
-        model=character,
+        model="bubbles",
         messages=[{"role":"user", "content":""}])
 
     convoThread = threading.Thread(target=convoLoopThread)
