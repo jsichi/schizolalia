@@ -446,11 +446,12 @@ def uploadImmich(file):
         'fileModifiedAt': datetime.fromtimestamp(stats.st_mtime),
         'isFavorite': 'false',
     }
-    files = {
-        'assetData': open(file, 'rb')
-    }
-    response = requests.post(
-        f'{immichUrl}/assets', headers=immichHeaders, data=data, files=files)
+    with open(file, 'rb') as f:
+        files = {
+            'assetData': f
+        }
+        response = requests.post(
+            f'{immichUrl}/assets', headers=immichHeaders, data=data, files=files)
     json = response.json()
     print(json)
     return json['id']
@@ -493,8 +494,8 @@ def recognizeFace(imgFile):
 
 def cameraSnapshot(dir, seq):
     print("Taking snapshot.")
-    camera = imageio.get_reader("<video0>")
-    screenshot = camera.get_data(0)
+    with imageio.get_reader("<video0>") as camera:
+        screenshot = camera.get_data(0)
     imgFile = constructImgFilename(dir, "output", seq)
     imageio.imwrite(imgFile, screenshot)
     displayImg(imgFile)
