@@ -84,16 +84,16 @@ def drawBoundingBox(img, coords):
     draw.rectangle(coords, outline=color, width=3)
 
 class Webcam:
-    def __init__(self, window, width=512, height=512):
+    def __init__(self, window):
         self.window = window
-        self.width = width
-        self.height = height
 
     def show(self):
         assert(webcamFile)
         self.frameCount = 0
         self.found = False
         self.cap = cv2.VideoCapture(0)
+        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.label = tk.Label(self.window, width=self.width, height=self.height)
         self.label.pack()
         self.label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
