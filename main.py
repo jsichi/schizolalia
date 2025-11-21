@@ -92,8 +92,8 @@ class Webcam:
         self.frameCount = 0
         self.found = False
         self.cap = cv2.VideoCapture(0)
-        self.width = 640
-        self.height = 480
+        self.width = 512
+        self.height = 512
         self.label = tk.Label(self.window, width=self.width, height=self.height)
         self.label.pack()
         self.label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
@@ -113,7 +113,7 @@ class Webcam:
             recognized = True
             print(human)
             draw = ImageDraw.Draw(img)
-            draw.text((50, 50), human, color, font_size=50)
+            draw.text((50, 50), human, color, font_size=250)
         else:
             self.frameCount += 1
             if locs and (self.frameCount > 20):
