@@ -92,10 +92,8 @@ class Webcam:
         self.frameCount = 0
         self.found = False
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.width = 640
+        self.height = 480
         self.label = tk.Label(self.window, width=self.width, height=self.height)
         self.label.pack()
         self.label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
@@ -104,6 +102,7 @@ class Webcam:
     def showFrames(self):
         recognized = False
         cv2image = cv2.cvtColor(self.cap.read()[1], cv2.COLOR_BGR2RGB)
+        cv2image = cv2.resize(cv2image, (self.width, self.height), interpolation=cv2.INTER_AREA)
         locs = face_recognition.api.face_locations(cv2image, 1, "hog")
         imgOrig = Image.fromarray(cv2image)
         img = imgOrig.transpose(Image.FLIP_LEFT_RIGHT)
