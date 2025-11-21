@@ -92,8 +92,8 @@ class Webcam:
         self.frameCount = 0
         self.found = False
         self.cap = cv2.VideoCapture(0)
-        self.width = 512
-        self.height = 512
+        self.width = 320
+        self.height = 200
         self.label = tk.Label(self.window, width=self.width, height=self.height)
         self.label.pack()
         self.label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
