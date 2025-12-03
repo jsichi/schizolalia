@@ -221,6 +221,8 @@ def listenForWakeword(recorder, porcupineEn, porcupineKo):
             match resultEn:
                 case 1:
                     character = "buttercup"
+                case 2:
+                    character = "rocky"
                 case _:
                     character = "bubbles"
             enqueueEvent("<<WakewordHeard>>")
@@ -402,7 +404,7 @@ switchTool = {
             'properties': {
                 'character': {
                     'type': 'string',
-                    'enum': ['bubbles', 'buttercup', 'sejong'],
+                    'enum': ['bubbles', 'buttercup', 'rocky', 'sejong'],
                     'description': 'The character to switch to.',
                 },
             },
@@ -569,7 +571,7 @@ async def sendChat(dir, input, seq):
                 newCharacter = cleanName(json.loads(tool.function.arguments)['character'])
                 print(f"Switch request:  {newCharacter}")
                 match newCharacter:
-                    case 'bubbles' | 'buttercup' | 'sejong':
+                    case 'bubbles' | 'buttercup' | 'rocky' | 'sejong':
                         switchQueue.put(newCharacter)
                         return ("", True)
             case 'drawTool':
@@ -581,6 +583,8 @@ async def sendChat(dir, input, seq):
                     case 'buttercup':
                         stylePrompt = "a child's crayon drawing, (brown:1.5), (black:1.5), "
                         "(green:1.5), (emo), (scribbling:2), (sloppy:2)"
+                    case 'rocky':
+                        stylePrompt = "a newspaper photo, (black:1.5)"
                     case _:
                         stylePrompt = "a kindergartener's drawing, (cute:2), (pretty:2), (crayon)"
                 enqueueEvent("<<DrawingStarted>>")
@@ -628,7 +632,8 @@ async def convoLoop():
 
     porcupineKeywordPathsEn = [
         'wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn',
-        'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn'
+        'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn',
+        'wakewords/Uncle-Rockey_en_linux_v3_0_0.ppn',
     ]
     porcupineKeywordPathsKo = [
         'wakewords/jeonha_ko_linux_v3_0_0.ppn',
@@ -707,6 +712,8 @@ async def convoLoop():
                                 prefix = "(excited) "
                             case 'buttercup':
                                 prefix = "(angry) "
+                            case 'rocky':
+                                prefix = "(excited) "
                             case _:
                                 prefix = ""
                         annotatedOutput = prefix + output
@@ -742,7 +749,7 @@ def uiLoop():
 
     characterImages = dict()
     imagesOnCanvas = dict()
-    for name in ['bubbles', 'buttercup', 'sejong']:
+    for name in ['bubbles', 'buttercup', 'rocky', 'sejong']:
         characterImages[name] = loadImages(name)
         imagesOnCanvas[name] = canvas.create_image(
             screenWidth/2, screenHeight/2, image=characterImages[name]['sleeping'], anchor=tk.NW)

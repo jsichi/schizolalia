@@ -4,6 +4,8 @@
 source commonEnv
 
 cp -r ${SRC_DIR}/samples/rocky ${FISH_DIR}/references
+cp -r ~/Dropbox/schizolalia/images/rocky ${RUN_DIR}/images
+cp ~/Dropbox/schizolalia/Uncle-Rocky_en_linux_v3_0_0.ppn ${RUN_DIR}/wakewords
 
 cd ${SRC_DIR}
 ollama create rocky -f models/rocky
