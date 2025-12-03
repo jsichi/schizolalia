@@ -638,12 +638,12 @@ async def convoLoop():
         porcupineEn = pvporcupine.create(
             access_key=picovoiceKey,
             keyword_paths=porcupineKeywordPathsEn,
-            sensitivities = [0.25] * len(porcupineKeywordPathsEn))
+            sensitivities = [0.3] * len(porcupineKeywordPathsEn))
         porcupineKo = pvporcupine.create(
             access_key=picovoiceKey,
             keyword_paths=porcupineKeywordPathsKo,
             model_path='wakewords/porcupine_params_ko.pv',
-            sensitivities = [0.5] * len(porcupineKeywordPathsKo))
+            sensitivities = [0.3] * len(porcupineKeywordPathsKo))
     except pvporcupine.PorcupineError as e:
         print("Failed to initialize Porcupine")
         raise e
