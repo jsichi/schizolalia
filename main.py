@@ -633,7 +633,7 @@ async def convoLoop():
     porcupineKeywordPathsEn = [
         'wakewords/Hi-Bubbles_en_linux_v3_0_0.ppn',
         'wakewords/Hey-Buttercup_en_linux_v3_0_0.ppn',
-        'wakewords/Uncle-Rockey_en_linux_v3_0_0.ppn',
+        'wakewords/Uncle-Rocky_en_linux_v3_0_0.ppn',
     ]
     porcupineKeywordPathsKo = [
         'wakewords/jeonha_ko_linux_v3_0_0.ppn',
