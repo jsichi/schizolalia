@@ -171,6 +171,8 @@ def speakText(dir, text, seq):
     seed = "10"
     if (character == "buttercup"):
         seed = "60"
+    if (character == "rocky"):
+        seed = "100"
     call_subprocess(
         "fish-speech/tools/api_client.py",
         "--url", config['tts-client']['Url'],
@@ -643,12 +645,12 @@ async def convoLoop():
         porcupineEn = pvporcupine.create(
             access_key=picovoiceKey,
             keyword_paths=porcupineKeywordPathsEn,
-            sensitivities = [0.3] * len(porcupineKeywordPathsEn))
+            sensitivities = [0.4] * len(porcupineKeywordPathsEn))
         porcupineKo = pvporcupine.create(
             access_key=picovoiceKey,
             keyword_paths=porcupineKeywordPathsKo,
             model_path='wakewords/porcupine_params_ko.pv',
-            sensitivities = [0.3] * len(porcupineKeywordPathsKo))
+            sensitivities = [0.4] * len(porcupineKeywordPathsKo))
     except pvporcupine.PorcupineError as e:
         print("Failed to initialize Porcupine")
         raise e
