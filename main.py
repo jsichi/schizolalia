@@ -172,7 +172,7 @@ def speakText(dir, text, seq):
     if (character == "buttercup"):
         seed = "60"
     if (character == "rocky"):
-        seed = "100"
+        seed = "9999"
     call_subprocess(
         "fish-speech/tools/api_client.py",
         "--url", config['tts-client']['Url'],
