@@ -11,3 +11,5 @@ pip install tk
 pip install opencv-python
 pip install face-recognition
 pip install imageio[ffmpeg]
+pip install shelves
+pip install pydub

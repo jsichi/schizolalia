@@ -17,6 +17,7 @@ import json
 import asyncio
 import tempfile
 import imageio
+import re
 
 import pvcobra
 import pvporcupine
@@ -34,6 +35,11 @@ import tkinter as tk
 
 import cv2
 import face_recognition
+
+import shelve
+
+from pydub import AudioSegment
+from pydub.playback import play
 
 from PIL import ImageTk, Image, ImageOps, ImageDraw
 
@@ -66,6 +72,9 @@ immichHeaders = {
     'Accept': 'application/json',
     'x-api-key': config['immich']['ApiKey']
 }
+
+allCharacters = ['bubbles', 'buttercup', 'rocky', 'sejong']
+allHumans = ['John', 'Pascal', 'Mia', 'Steve', 'Betsy']
 
 global character
 character = "no one"
@@ -109,11 +118,13 @@ class Webcam:
         color = (255, 0, 0)
         if self.found:
             img.save(webcamFile)
-            recognizeFace(webcamFile)
-            recognized = True
-            print(human)
-            draw = ImageDraw.Draw(img)
-            draw.text((50, 50), human, color, font_size=250)
+            recognized = recognizeFace(webcamFile)
+            if recognized:
+                print(human)
+                draw = ImageDraw.Draw(img)
+                draw.text((50, 50), human, color, font_size=250)
+            else:
+                self.found = False
         else:
             self.frameCount += 1
             if locs and (self.frameCount > 20):
@@ -166,23 +177,39 @@ def constructWavFilename(dir, name, seq):
 def constructImgFilename(dir, name, seq):
     return constructFilename(dir, name, seq, ".png")
 
+def constructGreeting():
+    match character:
+        case 'sejong':
+            return f"안녕하세요, 저는 {human}입니다"
+        case _:
+            return f"Hello, I am {human}"
+
 def speakText(dir, text, seq):
     print("Saying:  " + text)
-    seed = "10"
-    if (character == "buttercup"):
-        seed = "60"
-    if (character == "rocky"):
-        seed = "9999"
-    call_subprocess(
-        "fish-speech/tools/api_client.py",
-        "--url", config['tts-client']['Url'],
-        "-t", text,
-        "--reference_id", character,
-        "--output", constructFilename(dir, "output", seq, ""),
-        "--latency", "balanced",
-        "--use_memory_cache", "on",
-        "--seed", seed,
-        "--streaming", "True")
+    filename = constructFilename(dir, "output", seq, "")
+    with shelve.open('speech-cache.db') as speechCache:
+        key = f"AUDIO:{character}:{text}"
+        if key in speechCache:
+            filename = speechCache[key]
+            audio = AudioSegment.from_wav(filename)
+            play(audio)
+        else:
+            seed = "10"
+            if (character == "buttercup"):
+                seed = "60"
+            if (character == "rocky"):
+                seed = "9999"
+            call_subprocess(
+                "fish-speech/tools/api_client.py",
+                "--url", config['tts-client']['Url'],
+                "-t", text,
+                "--reference_id", character,
+                "--output", filename,
+                "--latency", "balanced",
+                "--use_memory_cache", "on",
+                "--seed", seed,
+                "--streaming", "True")
+            speechCache[key] = f"{filename}.wav"
 
 def createWav(dir, filename, seq):
     wavFile = wave.open(constructWavFilename(dir, filename, seq), "w")
@@ -406,7 +433,7 @@ switchTool = {
             'properties': {
                 'character': {
                     'type': 'string',
-                    'enum': ['bubbles', 'buttercup', 'rocky', 'sejong'],
+                    'enum': allCharacters,
                     'description': 'The character to switch to.',
                 },
             },
@@ -496,6 +523,9 @@ def recognizeFace(imgFile):
             drawBoundingBox(img, coords)
             img.save(imgFile)
             print(faces[0])
+        return True
+    else:
+        return False
 
 def cameraSnapshot(dir, seq):
     print("Taking snapshot.")
@@ -550,7 +580,15 @@ async def drawImg(prompt, initImage):
         header, img_data = img_b64.split(',', 1) if ',' in img_b64 else (None, img_b64)
         return img_data
     return ""
-    
+
+def sendChatNoTools(chatMessages):
+    chatResponse = client.chat.completions.create(
+        model=character,
+        messages=chatMessages)
+    print(chatResponse)
+    text = chatResponse.choices[0].message.content
+    return re.sub(r'\([^)]*\)', '', text)
+
 async def sendChat(dir, input, seq):
     tentative = messages.copy()
     recordInput(tentative, input)
@@ -607,15 +645,7 @@ async def sendChat(dir, input, seq):
                 cameraSnapshot(dir, seq)
                 return ("#", True)
 
-    if tools:
-        chatResponse = client.chat.completions.create(
-            model=character,
-            messages=tentative)
-        print(chatResponse)
-        response = chatResponse.choices[0]
-    responseText = response.message.content
-    if character == "sejong":
-        responseText = "(pause) " + responseText
+    responseText = sendChatNoTools(tentative)
     return (responseText, False)
 
 def enqueueEvent(event):
@@ -628,6 +658,18 @@ def convoLoopThread():
     finally:
         enqueueEvent("<<AllDone>>")
 
+def characterExpression(text):
+    match character:
+        case 'bubbles':
+            prefix = "(excited)"
+        case 'buttercup':
+            prefix = "(angry)"
+        case 'rocky':
+            prefix = "(excited)"
+        case _:
+            prefix = "(pause)"
+    return f"{prefix} {text}"
+        
 async def convoLoop():
     global character
     picovoiceKey = config['picovoice']['AccessKey']
@@ -671,8 +713,6 @@ async def convoLoop():
     try:
         while not stopConvo.is_set():
             dirSeq += 1
-            dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
-            os.makedirs(dir)
             fileSeq = 1
             messages.clear()
             initialInput = ""
@@ -681,19 +721,29 @@ async def convoLoop():
                 enqueueEvent("<<ConvoStarted>>")
             else:
                 global webcamFile
+                dir = f"convos-{dirUnique}/c{dirSeq}-challenge"
+                os.makedirs(dir)
                 webcamFile = constructImgFilename(dir, "output", fileSeq)
                 listenForWakeword(recorder, porcupineEn, porcupineKo)
                 waitForHumanRecognition()
                 if stopConvo.is_set():
                     break
-                initialInput = f"Hello, I am {human}"
+                initialInput = constructGreeting()
 
+            dir = f"convos-{dirUnique}/c{dirSeq}-{character}"
+            os.makedirs(dir)
             conversing = True
 
             while conversing:
                 fileSeq += 1
                 if initialInput:
-                    (response, toolCalled) = await sendChat(dir, initialInput, fileSeq)
+                    with shelve.open('speech-cache.db') as speechCache:
+                        key = f"GREETING:{character}:{human}"
+                        if key in speechCache:
+                            response = speechCache[key]
+                        else:
+                            (response, toolCalled) = await sendChat(dir, initialInput, fileSeq)
+                            speechCache[key] = response
                     print("Greeting response:  " + response)
                     recordExchange(messages, initialInput, response, dir, fileSeq)
                     output = response
@@ -708,17 +758,7 @@ async def convoLoop():
                         conversing = False
                     case _:
                         enqueueEvent("<<InputProcessed>>")
-
-                        match character:
-                            case 'bubbles':
-                                prefix = "(excited) "
-                            case 'buttercup':
-                                prefix = "(angry) "
-                            case 'rocky':
-                                prefix = "(excited) "
-                            case _:
-                                prefix = ""
-                        annotatedOutput = prefix + output
+                        annotatedOutput = characterExpression(output)
                         speakText(dir, annotatedOutput, fileSeq)
                         waitForSilence(recorder, cobra)
                         enqueueEvent("<<ConvoStarted>>")
@@ -859,6 +899,31 @@ def main():
         model="bubbles",
         messages=[{"role":"user", "content":""}])
 
+    with shelve.open('speech-cache.db') as speechCache:
+        hasKeys = bool(speechCache.keys())
+    if not hasKeys:
+        dir = "greetings"
+        os.makedirs(dir, exist_ok=True)
+        global human
+        global character
+        seq = 0
+        for c in allCharacters:
+            for h in allHumans:
+                human = h
+                character = c
+                input = constructGreeting()
+                greetingMessages = messages.copy()
+                recordInput(greetingMessages, input)
+                response = sendChatNoTools(greetingMessages)
+                with shelve.open('speech-cache.db') as speechCache:
+                    key = f"GREETING:{character}:{human}"
+                    speechCache[key] = response
+                annotated = characterExpression(response)
+                speakText(dir, annotated, seq)
+                seq += 1
+                     
+    human = "A Stranger"
+    character = "no one"
     convoThread = threading.Thread(target=convoLoopThread)
     convoThread.start()
     try:
@@ -869,4 +934,3 @@ def main():
     convoThread.join()
 
 main()
-
